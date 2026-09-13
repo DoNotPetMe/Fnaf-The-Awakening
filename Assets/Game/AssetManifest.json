@@ -1,0 +1,153 @@
+{
+  "_comment": [
+    "Curated open-licence art and audio for The Awakening.",
+    "",
+    "The game is complete and coherent with none of this: every surface and every",
+    "sound is generated at runtime (see TextureFactory and ProceduralAudio). These",
+    "packs replace the generated versions by name, with no code change, and are what",
+    "take the project from 'coherent' to 'good'.",
+    "",
+    "IMPORTANT — read docs/ASSETS.md before shipping a build. Each pack keeps its own",
+    "licence; the fetcher writes an ATTRIBUTION.md next to whatever it downloads.",
+    "",
+    "The 'verified' flag records whether a download URL was confirmed reachable at",
+    "the time this manifest was written. Entries marked false use the documented",
+    "public API pattern for that source but were not confirmed, because the machine",
+    "this file was authored on had no egress to art hosts. The fetcher reports a",
+    "clear error rather than failing silently, and every entry carries a sourceUrl",
+    "you can open to grab the file by hand."
+  ],
+
+  "version": 1,
+
+  "surfaces": [
+    {
+      "id": "cave_rock",
+      "displayName": "Limestone / cave rock",
+      "mapsTo": "CaveRock",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=Rock030",
+      "downloadUrl": "https://ambientcg.com/get?file=Rock030_2K-PNG.zip",
+      "verified": false,
+      "notes": "Pale, bedded limestone. Rename the albedo/normal/ARM maps per docs/ASSETS.md."
+    },
+    {
+      "id": "cave_rock_damp",
+      "displayName": "Wet rock / flooded gallery",
+      "mapsTo": "CaveRockDamp",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=Rock035",
+      "downloadUrl": "https://ambientcg.com/get?file=Rock035_2K-PNG.zip",
+      "verified": false,
+      "notes": "Darker and wetter. Used below the historic high-water mark."
+    },
+    {
+      "id": "shotcrete",
+      "displayName": "Shotcrete tunnel lining",
+      "mapsTo": "Shotcrete",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=Concrete034",
+      "downloadUrl": "https://ambientcg.com/get?file=Concrete034_2K-PNG.zip",
+      "verified": false,
+      "notes": "Sprayed concrete for the adits and the built rooms."
+    },
+    {
+      "id": "steel_painted",
+      "displayName": "Painted steel",
+      "mapsTo": "SteelPainted",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=Metal032",
+      "downloadUrl": "https://ambientcg.com/get?file=Metal032_2K-PNG.zip",
+      "verified": false,
+      "notes": "Doors, lockers, arcade cabinet bodies."
+    },
+    {
+      "id": "steel_rusted",
+      "displayName": "Rusted steel",
+      "mapsTo": "SteelRusted",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=Metal038",
+      "downloadUrl": "https://ambientcg.com/get?file=Metal038_2K-PNG.zip",
+      "verified": false,
+      "notes": "Pipework, catwalks, the grate, the endoskeletons."
+    },
+    {
+      "id": "carpet",
+      "displayName": "Patterned carpet",
+      "mapsTo": "ArcadeCarpet",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=Carpet013",
+      "downloadUrl": "https://ambientcg.com/get?file=Carpet013_2K-PNG.zip",
+      "verified": false,
+      "notes": "The generated version is a deliberately garish 1979 confetti pattern; a real scan is calmer. Keep whichever you prefer."
+    },
+    {
+      "id": "decking",
+      "displayName": "Timber decking",
+      "mapsTo": "Decking",
+      "source": "ambientCG",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://ambientcg.com/view?id=WoodFloor041",
+      "downloadUrl": "https://ambientcg.com/get?file=WoodFloor041_2K-PNG.zip",
+      "verified": false,
+      "notes": "Crossing bridge, stage boards, workbenches."
+    }
+  ],
+
+  "environment": [
+    {
+      "id": "hdri_cave",
+      "displayName": "Dark interior HDRI",
+      "source": "Poly Haven",
+      "licence": "CC0 1.0",
+      "sourceUrl": "https://polyhaven.com/a/lilienstein",
+      "polyhavenId": "lilienstein",
+      "polyhavenType": "hdris",
+      "polyhavenResolution": "2k",
+      "verified": false,
+      "notes": "Optional. The cave is fully enclosed, so this only affects reflection probes. Resolved through the documented api.polyhaven.com/files endpoint."
+    }
+  ],
+
+  "audio": [
+    {
+      "id": "sonniss_gdc",
+      "displayName": "Sonniss GDC Game Audio Bundle",
+      "source": "Sonniss",
+      "licence": "Royalty-free, commercial use permitted; see the bundle's own licence file",
+      "sourceUrl": "https://sonniss.com/gameaudiogdc",
+      "downloadUrl": "",
+      "verified": false,
+      "notes": "Tens of gigabytes and distributed as yearly torrents, so it is not auto-downloadable. Worth taking the cave tones, water and metal impacts by hand. Drop clips into Assets/Game/Resources/Audio/ named GeneratorHum, FanLoop, PumpLoop, Cavitation, Static, CaveAmbience, Drip, MetalImpact, DoorCycle, BreakerClack, Footstep, Jumpscare, DawnChime to override the synthesised versions."
+    },
+    {
+      "id": "freesound_cave",
+      "displayName": "Cave ambience and water drips",
+      "source": "Freesound",
+      "licence": "Varies per clip — check each; prefer CC0",
+      "sourceUrl": "https://freesound.org/search/?q=cave+ambience&f=license:%22Creative+Commons+0%22",
+      "downloadUrl": "",
+      "verified": false,
+      "notes": "Freesound requires an account and an API key for programmatic download, so this one is a browse link by design."
+    }
+  ],
+
+  "models": [
+    {
+      "id": "note_on_models",
+      "displayName": "A note on character models",
+      "source": "",
+      "licence": "",
+      "sourceUrl": "https://quaternius.com/",
+      "downloadUrl": "",
+      "verified": false,
+      "notes": "The cast is generated by AnimatronicFactory and needs no downloaded models. If you want sculpted characters instead, replace AnimatronicModelSpawner with a prefab reference and keep the AnimatronicRig bone names — ServoAnimator drives the rig by reference, not by name lookup, so any rig works once wired. Quaternius and Kenney both publish CC0 character and prop packs suitable as a base. Do NOT use Five Nights at Freddy's character models or rips: they are Scott Cawthon's IP and this project ships none of them."
+    }
+  ]
+}
