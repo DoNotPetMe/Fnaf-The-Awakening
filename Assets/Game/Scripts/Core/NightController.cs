@@ -43,6 +43,15 @@ namespace Grotto.Core
         /// <summary>Seconds remaining in the briefing phase; 0 outside it.</summary>
         public float BriefingRemaining => _briefingRemaining;
 
+        /// <summary>
+        /// While true the briefing countdown is paused.
+        ///
+        /// The briefing screen sets this so a player reading the shift orders for the
+        /// first time is not thrown into the night halfway through a sentence. Cleared
+        /// when they dismiss it.
+        /// </summary>
+        public bool HoldBriefing { get; set; }
+
         private void Awake()
         {
             if (config == null) config = GameConfig.LoadDefault();
@@ -142,6 +151,7 @@ namespace Grotto.Core
         /// <summary>Skips the remaining briefing. Used by "press any key" and by the dev console.</summary>
         public void SkipBriefing()
         {
+            HoldBriefing = false;
             if (CurrentPhase == Phase.Briefing) _phases.Transition(Phase.Active);
         }
 
@@ -151,12 +161,15 @@ namespace Grotto.Core
 
         private void EnterBriefing()
         {
+            HoldBriefing = false;
             _briefingRemaining = CurrentDefinition.briefingSeconds;
             EventBus.Publish(new AlertSignal(CurrentDefinition.briefing));
         }
 
         private void TickBriefing(float dt)
         {
+            if (HoldBriefing) return;
+
             _briefingRemaining -= dt;
             if (_briefingRemaining <= 0f) _phases.Transition(Phase.Active);
         }

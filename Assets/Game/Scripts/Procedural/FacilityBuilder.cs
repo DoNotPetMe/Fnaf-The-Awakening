@@ -67,15 +67,28 @@ namespace Grotto.Procedural
                 var b = graph.Node(link.B);
                 if (a == null || b == null) continue;
 
-                // Bore from the edge of each chamber rather than the centre, or the
-                // tunnel disappears inside the rooms it joins.
-                var direction = (b.Position - a.Position).normalized;
-                var from = a.Position + direction * (Mathf.Max(a.Size.x, a.Size.z) * 0.35f);
-                var to = b.Position - direction * (Mathf.Max(b.Size.x, b.Size.z) * 0.35f);
-
                 float radius = ConnectorRadius(link);
-                var surface = link.MinWater > 0f ? SurfaceKind.CaveRockDamp : SurfaceKind.CaveRock;
 
+                // Bore wall-to-wall, along the floor. The previous version started the
+                // tube at a fraction of the node's largest dimension and at the node's
+                // *centre* height, which for the control room meant a 1.5 metre tube
+                // beginning over a metre inside the room at eye level — it filled the
+                // player's entire view on the first frame.
+                var horizontal = new Vector3(b.Position.x - a.Position.x, 0f, b.Position.z - a.Position.z);
+                if (horizontal.sqrMagnitude < 0.01f) continue;   // stacked vertically; a shaft, not a bore
+
+                float span = horizontal.magnitude;
+                horizontal /= span;
+
+                var from = WallPoint(a, horizontal, radius);
+                var to = WallPoint(b, -horizontal, radius);
+
+                // If the two spaces already meet, there is no gap left to bore and any
+                // tube drawn here would be inside one of the rooms.
+                float gap = Vector3.Dot(to - from, horizontal);
+                if (gap < radius) continue;
+
+                var surface = link.MinWater > 0f ? SurfaceKind.CaveRockDamp : SurfaceKind.CaveRock;
                 CaveShaper.BuildConnector(connectorBatch, from, to, radius, seed + i * 31, surface);
             }
 
@@ -92,6 +105,25 @@ namespace Grotto.Procedural
                 $"Built {layout.siteName}: {graph.NodeCount} nodes, {totalTriangles} triangles.");
 
             return root;
+        }
+
+        /// <summary>
+        /// Where a horizontal bore leaves a node: through the side wall, at floor
+        /// level. CaveShaper puts a node's floor at 35% of its height below centre.
+        /// </summary>
+        private static Vector3 WallPoint(FacilityNode node, Vector3 horizontal, float tunnelRadius)
+        {
+            var half = node.Size * 0.5f;
+
+            // Distance from the centre to the box wall along this heading.
+            float alongX = Mathf.Abs(horizontal.x) > 1e-4f ? half.x / Mathf.Abs(horizontal.x) : float.MaxValue;
+            float alongZ = Mathf.Abs(horizontal.z) > 1e-4f ? half.z / Mathf.Abs(horizontal.z) : float.MaxValue;
+            float toWall = Mathf.Min(alongX, alongZ);
+
+            float floorY = node.Position.y - node.Size.y * 0.35f;
+
+            var mouth = new Vector3(node.Position.x, floorY + tunnelRadius * 0.95f, node.Position.z);
+            return mouth + horizontal * toWall;
         }
 
         private static float ConnectorRadius(FacilityLink link)
@@ -240,16 +272,35 @@ namespace Grotto.Procedural
                 go.transform.SetParent(root.transform, worldPositionStays: false);
                 go.transform.position = node.Position + Vector3.up * (node.Size.y * 0.28f);
 
+                bool isStation = node.Kind == NodeKind.Station;
+
                 var light = go.AddComponent<Light>();
                 light.type = LightType.Point;
-                light.range = Mathf.Max(node.Size.x, node.Size.z) * 0.9f;
+                light.range = Mathf.Max(node.Size.x, node.Size.z) * (isStation ? 1.8f : 1.1f);
 
                 // Emergency circuit: sodium, dim, and losing the argument with the dark.
-                light.color = new Color(1f, 0.78f, 0.5f);
-                light.intensity = node.Kind == NodeKind.Station ? 1.6f : 0.75f;
+                // The station is the exception — the player has to be able to read the
+                // room they spend the entire game sitting in.
+                light.color = new Color(1f, 0.82f, 0.58f);
+                light.intensity = isStation ? 4.2f : 0.9f;
                 light.shadows = LightShadows.Soft;
-                light.shadowStrength = 0.85f;
+                light.shadowStrength = isStation ? 0.6f : 0.85f;
                 light.renderMode = LightRenderMode.ForcePixel;
+
+                if (!isStation) continue;
+
+                // A second, colder fill behind the desk, so the room reads as a space
+                // with depth instead of one bulb in a brown fog.
+                var fillObject = new GameObject("Light_STATION_Fill");
+                fillObject.transform.SetParent(root.transform, worldPositionStays: false);
+                fillObject.transform.position = node.Position + new Vector3(0f, node.Size.y * 0.2f, -node.Size.z * 0.3f);
+
+                var stationFill = fillObject.AddComponent<Light>();
+                stationFill.type = LightType.Point;
+                stationFill.range = Mathf.Max(node.Size.x, node.Size.z) * 1.2f;
+                stationFill.color = new Color(0.62f, 0.74f, 0.9f);
+                stationFill.intensity = 1.1f;
+                stationFill.shadows = LightShadows.None;
             }
 
             // One very dim fill so the unlit caverns read as black rather than as void.

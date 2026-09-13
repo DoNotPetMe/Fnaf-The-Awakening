@@ -35,6 +35,16 @@ namespace Grotto.Player
 
         [SerializeField] private Headlamp headlamp;
 
+        [Header("Seated pose")]
+        [Tooltip("Place the head at a seated height relative to the control room floor on start.")]
+        [SerializeField] private bool applySeatedPose = true;
+
+        [Tooltip("Eye height above the control room floor, in metres.")]
+        [SerializeField] private float eyeHeight = 1.18f;
+
+        [Tooltip("How far back from the room centre the chair sits. Positive is south.")]
+        [SerializeField] private float seatOffset = 2.1f;
+
         [Header("Look")]
         [SerializeField] private float lookSensitivity = 0.12f;
         [SerializeField] private float maxYaw = 118f;
@@ -58,9 +68,15 @@ namespace Grotto.Player
         private FacilityRuntime _facility;
         private NightController _night;
 
-        private BlastDoor _doorNorth;
-        private BlastDoor _doorSouth;
-        private SumpGrate _grate;
+        // Resolved on demand rather than cached in Start.
+        //
+        // BlastDoor and SumpGrate register themselves with the facility in their own
+        // Start, and this component runs at -600 — long before them. Caching here
+        // captured nulls every time, which is why pressing a door key reported that
+        // no door was wired to the station.
+        private BlastDoor DoorNorth => _facility.GetBarrier(GrottoSpringsLayout.DoorNorth) as BlastDoor;
+        private BlastDoor DoorSouth => _facility.GetBarrier(GrottoSpringsLayout.DoorSouth) as BlastDoor;
+        private SumpGrate Grate => _facility.GetBarrier(GrottoSpringsLayout.SumpGrate) as SumpGrate;
 
         private float _targetYaw;
         private float _targetPitch;
@@ -105,17 +121,43 @@ namespace Grotto.Player
             ServiceLocator.TryGet(out _night);
             ServiceLocator.Register(this);
 
-            _doorNorth = _facility.GetBarrier(GrottoSpringsLayout.DoorNorth) as BlastDoor;
-            _doorSouth = _facility.GetBarrier(GrottoSpringsLayout.DoorSouth) as BlastDoor;
-            _grate = _facility.GetBarrier(GrottoSpringsLayout.SumpGrate) as SumpGrate;
-
             ResolveFloodlights();
+            ApplySeatedPose();
 
             if (ServiceLocator.TryGet(out SaveSystem save))
                 lookSensitivity *= Mathf.Max(0.1f, save.Data.settings.lookSensitivity);
 
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
+        }
+
+        /// <summary>
+        /// Puts the head at a seated height measured from the control room's actual
+        /// floor, rather than trusting whatever offset the scene was built with.
+        ///
+        /// The floor sits below the node's centre, so a pivot placed at the node
+        /// origin ends up near the ceiling of a 3.2 metre room — which is most of why
+        /// the opening view was unreadable.
+        /// </summary>
+        private void ApplySeatedPose()
+        {
+            if (!applySeatedPose || headPivot == null) return;
+
+            var station = _facility.Graph.Node(_facility.StationNode);
+            if (station == null) return;
+
+            // CaveShaper puts a node's floor at 35% of its height below the centre.
+            float floorY = station.Position.y - station.Size.y * 0.35f;
+
+            headPivot.position = new Vector3(
+                station.Position.x,
+                floorY + eyeHeight,
+                station.Position.z - seatOffset);
+
+            headPivot.localRotation = Quaternion.identity;
+
+            GLog.Info(LogChannel.Player,
+                $"Seated at {headPivot.position.y:0.00}m ({eyeHeight:0.00}m above a floor at {floorY:0.00}m).");
         }
 
         private void ResolveFloodlights()
@@ -209,8 +251,8 @@ namespace Grotto.Player
             if (_input.NextCamera.WasPressedThisFrame()) _facility.Surveillance.SelectNext(1);
             if (_input.PreviousCamera.WasPressedThisFrame()) _facility.Surveillance.SelectNext(-1);
 
-            if (_input.DoorNorth.WasPressedThisFrame()) ToggleDoor(_doorNorth, "north");
-            if (_input.DoorSouth.WasPressedThisFrame()) ToggleDoor(_doorSouth, "south");
+            if (_input.DoorNorth.WasPressedThisFrame()) ToggleDoor(DoorNorth, "north");
+            if (_input.DoorSouth.WasPressedThisFrame()) ToggleDoor(DoorSouth, "south");
 
             if (_input.LightNorth.WasPressedThisFrame()) northLight?.Toggle();
             if (_input.LightSouth.WasPressedThisFrame()) southLight?.Toggle();
@@ -221,7 +263,7 @@ namespace Grotto.Player
             if (_input.TogglePump.WasPressedThisFrame())
                 _facility.Water.PumpCommanded = !_facility.Water.PumpCommanded;
 
-            if (_input.ToggleGrate.WasPressedThisFrame()) _grate?.Toggle();
+            if (_input.ToggleGrate.WasPressedThisFrame()) Grate?.Toggle();
 
             if (_input.Headlamp.WasPressedThisFrame()) headlamp?.Toggle();
 

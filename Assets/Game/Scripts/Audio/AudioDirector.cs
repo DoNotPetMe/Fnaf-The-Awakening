@@ -369,6 +369,18 @@ namespace Grotto.Audio
             source.Play();
         }
 
+        /// <summary>
+        /// Fires the jumpscare sting directly, without an AttackSignal.
+        ///
+        /// The signal path ends the night; this does not. The jumpscare test picker
+        /// needs the sound without the consequence.
+        /// </summary>
+        public void PlayJumpscare()
+        {
+            float volume = _reducedJumpscareAudio ? 0.35f : 1f;
+            PlayAt("Jumpscare", transform.position, volume * masterVolume, 1f, spatial: false);
+        }
+
         /// <summary>Plays a door cycle at a node. Called by the scene's door wiring.</summary>
         public void PlayDoorCycle(NodeId node)
             => PlayAt("DoorCycle", _facility.Graph.PositionOf(node), 0.8f * masterVolume * effectsVolume);

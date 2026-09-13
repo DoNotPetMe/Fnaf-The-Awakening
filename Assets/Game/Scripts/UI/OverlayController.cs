@@ -1,7 +1,10 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Grotto.AI;
+using Grotto.Audio;
 using Grotto.Core;
 using Grotto.Procedural;
 using Grotto.Rendering;
@@ -38,6 +41,12 @@ namespace Grotto.UI
         [Header("Fades")]
         [SerializeField] private float fadeSeconds = 1.2f;
 
+        [Header("Jumpscare test")]
+        [Tooltip("Opens the jumpscare picker with the toggle key at any point in a night.")]
+        [SerializeField] private bool enableJumpscareTester = true;
+
+        [SerializeField] private Key testerToggleKey = Key.J;
+
         private Canvas _canvas;
         private Image _conditionOverlay;
         private Image _fade;
@@ -51,6 +60,26 @@ namespace Grotto.UI
         private Coroutine _scareRoutine;
         private bool _photosensitive;
 
+        private NightController _night;
+        private AudioDirector _audio;
+
+        // Where the camera came from, captured once per jumpscare rather than per
+        // coroutine. Restarting a scare while one is already playing would otherwise
+        // capture the *detached* transform as the thing to return to, and the camera
+        // would never find its way back to the chair.
+        private Transform _cameraHome;
+        private Vector3 _cameraHomePosition;
+        private Quaternion _cameraHomeRotation;
+        private float _cameraHomeFov;
+        private bool _cameraDetached;
+
+        private RectTransform _testerGroup;
+        private Text _testerName;
+        private Text _testerHint;
+        private readonly List<AnimatronicController> _testerCast = new List<AnimatronicController>(8);
+        private int _testerIndex;
+        private bool _testerOpen;
+
         private static readonly int HallucinationProperty = Shader.PropertyToID("_Hallucination");
         private static readonly int ScareProperty = Shader.PropertyToID("_Scare");
         private static readonly int BlackoutProperty = Shader.PropertyToID("_Blackout");
@@ -60,6 +89,8 @@ namespace Grotto.UI
             _camera = Camera.main;
             ServiceLocator.TryGet(out _postFx);
             ServiceLocator.TryGet(out _ai);
+            ServiceLocator.TryGet(out _night);
+            ServiceLocator.TryGet(out _audio);
 
             if (ServiceLocator.TryGet(out SaveSystem save))
                 _photosensitive = save.Data.settings.photosensitiveMode;
@@ -78,6 +109,7 @@ namespace Grotto.UI
             EventBus.Unsubscribe<NightStartedSignal>(OnNightStarted);
 
             if (_overlayMaterial != null) Destroy(_overlayMaterial);
+            RestoreCamera();
         }
 
         private void Build()
@@ -107,16 +139,157 @@ namespace Grotto.UI
             UIFactory.Stretch(_outcomeText.rectTransform);
             _outcomeText.color = new Color(1f, 1f, 1f, 0f);
 
+            BuildJumpscareTester();
+
             StartCoroutine(FadeTo(0f));
         }
 
         private void Update()
         {
+            TickJumpscareTester();
+
             if (_overlayMaterial == null || _postFx == null) return;
 
             _overlayMaterial.SetFloat(HallucinationProperty, _postFx.HallucinationLevel);
             _overlayMaterial.SetFloat(ScareProperty, _postFx.ScareLevel);
             _overlayMaterial.SetFloat(BlackoutProperty, _postFx.BlackoutLevel);
+        }
+
+        // ---------------------------------------------------------------------
+        // Jumpscare test picker
+        // ---------------------------------------------------------------------
+
+        /// <summary>
+        /// A picker for firing any character's jumpscare on demand.
+        ///
+        /// Jumpscares are the one thing in the game that is genuinely hard to iterate
+        /// on: reaching one honestly means surviving to the point where a specific
+        /// character breaches, which can take most of a night and cannot be aimed at a
+        /// particular character. This makes the presentation reviewable in isolation.
+        ///
+        /// It fires the *presentation* only — no AttackSignal — so the night carries
+        /// on afterwards and you can fire the next one straight away.
+        /// </summary>
+        private void BuildJumpscareTester()
+        {
+            _testerGroup = UIFactory.Group(_canvas.transform, "Jumpscare Tester");
+
+            var panel = UIFactory.Panel(_testerGroup, "Panel", new Color(0.04f, 0.03f, 0.03f, 0.92f));
+            UIFactory.Anchor(panel.rectTransform, UIFactory.BottomCentre,
+                new Vector2(0f, 70f), new Vector2(680f, 168f));
+
+            var outline = panel.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0.55f, 0.16f, 0.14f, 1f);
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            var header = UIFactory.Label(panel.rectTransform, "Header",
+                "JUMPSCARE TEST", 18, TextAnchor.UpperCenter, UIFactory.InkAlarm);
+            UIFactory.Anchor(header.rectTransform, UIFactory.TopCentre,
+                new Vector2(0f, -12f), new Vector2(660f, 24f));
+
+            _testerName = UIFactory.Label(panel.rectTransform, "Name",
+                "", 38, TextAnchor.MiddleCenter, UIFactory.Ink);
+            UIFactory.Anchor(_testerName.rectTransform, UIFactory.Centre,
+                new Vector2(0f, 8f), new Vector2(660f, 52f));
+
+            _testerHint = UIFactory.Label(panel.rectTransform, "Hint",
+                "\u2190 \u2192  choose        ENTER  trigger        J  close",
+                17, TextAnchor.LowerCenter, UIFactory.InkDim);
+            UIFactory.Anchor(_testerHint.rectTransform, UIFactory.BottomCentre,
+                new Vector2(0f, 14f), new Vector2(660f, 24f));
+
+            _testerGroup.gameObject.SetActive(false);
+        }
+
+        private void TickJumpscareTester()
+        {
+            if (!enableJumpscareTester || _testerGroup == null) return;
+
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return;
+
+            if (keyboard[testerToggleKey].wasPressedThisFrame) ToggleJumpscareTester();
+
+            if (!_testerOpen) return;
+
+            // The briefing screen also listens for Enter; let it have the key.
+            if (_night != null && _night.CurrentPhase == NightController.Phase.Briefing) return;
+
+            if (_testerCast.Count == 0)
+            {
+                _testerName.text = "NO CAST IN THIS SCENE";
+                return;
+            }
+
+            if (keyboard.leftArrowKey.wasPressedThisFrame) StepTester(-1);
+            if (keyboard.rightArrowKey.wasPressedThisFrame) StepTester(1);
+
+            if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
+                FireSelectedJumpscare();
+        }
+
+        public void ToggleJumpscareTester()
+        {
+            _testerOpen = !_testerOpen;
+
+            if (_testerOpen)
+            {
+                RefreshTesterCast();
+                UpdateTesterLabel();
+            }
+
+            _testerGroup.gameObject.SetActive(_testerOpen);
+        }
+
+        private void RefreshTesterCast()
+        {
+            _testerCast.Clear();
+            if (_ai == null) return;
+
+            var cast = _ai.Cast;
+            for (int i = 0; i < cast.Count; i++)
+                if (cast[i] != null && cast[i].Definition != null) _testerCast.Add(cast[i]);
+
+            _testerIndex = Mathf.Clamp(_testerIndex, 0, Mathf.Max(0, _testerCast.Count - 1));
+        }
+
+        private void StepTester(int direction)
+        {
+            if (_testerCast.Count == 0) return;
+
+            _testerIndex = (_testerIndex + direction + _testerCast.Count) % _testerCast.Count;
+            UpdateTesterLabel();
+        }
+
+        private void UpdateTesterLabel()
+        {
+            if (_testerCast.Count == 0)
+            {
+                _testerName.text = "NO CAST IN THIS SCENE";
+                return;
+            }
+
+            var definition = _testerCast[_testerIndex].Definition;
+
+            _testerName.text = definition.displayName.ToUpperInvariant();
+            _testerName.color = definition.mapColor;
+
+            _testerHint.text = _testerCast.Count > 1
+                ? $"\u2190 \u2192  choose ({_testerIndex + 1}/{_testerCast.Count})        ENTER  trigger        J  close"
+                : "ENTER  trigger        J  close";
+        }
+
+        private void FireSelectedJumpscare()
+        {
+            if (_testerCast.Count == 0) return;
+
+            var controller = _testerCast[_testerIndex];
+            GLog.Info(LogChannel.UI, $"Jumpscare test: {controller.DisplayName}.");
+
+            // Picture from here, sound from the audio director. Neither path publishes
+            // an AttackSignal, so the night is untouched.
+            OnAttack(new AttackSignal(controller.Id, controller.CurrentNode));
+            _audio?.PlayJumpscare();
         }
 
         // ---------------------------------------------------------------------
@@ -207,6 +380,16 @@ namespace Grotto.UI
             var controller = _ai != null ? _ai.Find(signal.AnimatronicId) : null;
             var rig = controller != null ? controller.GetComponentInChildren<AnimatronicRig>() : null;
 
+            // A dormant character is standing at its home node on the far side of the
+            // cave, which frames as an empty room. For a test, bring it to the player.
+            if (rig != null && _testerOpen && _camera != null)
+            {
+                var front = _camera.transform.position + _camera.transform.forward * 1.4f;
+                controller.transform.position = new Vector3(front.x, controller.transform.position.y, front.z);
+                controller.transform.rotation = Quaternion.LookRotation(
+                    -_camera.transform.forward, Vector3.up);
+            }
+
             if (_camera == null || rig == null || rig.Head == null)
             {
                 // Nothing to frame — fall back to a hard flash so the moment still lands.
@@ -215,10 +398,18 @@ namespace Grotto.UI
             }
 
             // Take the camera off the station rig for the duration.
-            var originalParent = _camera.transform.parent;
-            var originalPosition = _camera.transform.position;
-            var originalRotation = _camera.transform.rotation;
-            float originalFov = _camera.fieldOfView;
+            if (!_cameraDetached)
+            {
+                _cameraHome = _camera.transform.parent;
+                _cameraHomePosition = _camera.transform.position;
+                _cameraHomeRotation = _camera.transform.rotation;
+                _cameraHomeFov = _camera.fieldOfView;
+                _cameraDetached = true;
+            }
+
+            var originalPosition = _cameraHomePosition;
+            var originalRotation = _cameraHomeRotation;
+            float originalFov = _cameraHomeFov;
 
             _camera.transform.SetParent(null, worldPositionStays: true);
 
@@ -261,12 +452,21 @@ namespace Grotto.UI
                 yield return null;
             }
 
-            _camera.transform.SetParent(originalParent, worldPositionStays: true);
-            _camera.transform.position = originalPosition;
-            _camera.transform.rotation = originalRotation;
-            _camera.fieldOfView = originalFov;
-
+            RestoreCamera();
             _scareRoutine = null;
+        }
+
+        /// <summary>Puts the camera back in the chair, wherever the scare left it.</summary>
+        private void RestoreCamera()
+        {
+            if (!_cameraDetached || _camera == null) return;
+
+            _camera.transform.SetParent(_cameraHome, worldPositionStays: true);
+            _camera.transform.position = _cameraHomePosition;
+            _camera.transform.rotation = _cameraHomeRotation;
+            _camera.fieldOfView = _cameraHomeFov;
+
+            _cameraDetached = false;
         }
 
         /// <summary>Plays a jumpscare on demand. Used by <c>fx.jumpscare</c>.</summary>

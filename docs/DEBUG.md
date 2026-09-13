@@ -189,6 +189,23 @@ the panel, because it says in words which of the two threats is currently live.
 
 ---
 
+## Jumpscare test picker — `J`
+
+Jumpscares are the one thing in the game that is genuinely hard to iterate on:
+reaching one honestly means surviving to the point where a specific character
+breaches, which takes most of a night and cannot be aimed at a chosen character.
+
+`J` opens a picker; `←` and `→` choose; `Enter` fires that character's jumpscare
+immediately. While the picker is open the character is moved in front of the camera
+first, so a dormant one standing across the cave still frames properly.
+
+It fires the **presentation only** — no `AttackSignal` — so the night carries on and
+you can fire the next one straight away. `fx.jumpscare <id>` does the same thing from
+the console.
+
+Turn it off with `enableJumpscareTester` on the `OverlayController` component, or
+rebind it with `testerToggleKey`.
+
 ## Scene view
 
 Runtime drawing uses `Debug.DrawLine`, so it appears in the Scene view while the game

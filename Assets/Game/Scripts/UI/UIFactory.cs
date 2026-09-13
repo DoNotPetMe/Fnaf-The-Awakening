@@ -104,7 +104,8 @@ namespace Grotto.UI
         }
 
         public static Text Label(Transform parent, string labelName, string content,
-            int fontSize = 22, TextAnchor anchor = TextAnchor.UpperLeft, Color? color = null)
+            int fontSize = 22, TextAnchor anchor = TextAnchor.UpperLeft, Color? color = null,
+            bool wrap = false)
         {
             var go = new GameObject(labelName, typeof(RectTransform));
             go.transform.SetParent(parent, worldPositionStays: false);
@@ -117,7 +118,7 @@ namespace Grotto.UI
             text.alignment = anchor;
             text.color = color ?? Ink;
             text.raycastTarget = false;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.horizontalOverflow = wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.supportRichText = true;
 

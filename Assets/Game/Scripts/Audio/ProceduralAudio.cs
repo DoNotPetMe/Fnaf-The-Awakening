@@ -63,7 +63,7 @@ namespace Grotto.Audio
                 value += lowpass * gate * 0.22f;
 
                 return value * 0.55f;
-            });
+            }, MachineryLevel);
         }
 
         /// <summary>Axial fan: broadband rush plus a blade-pass tone.</summary>
@@ -86,7 +86,7 @@ namespace Grotto.Audio
                 value += Mathf.Sin(Tau * bladePass * 2f * t) * 0.05f;
 
                 return value * 0.7f;
-            });
+            }, MachineryLevel * 0.8f);
         }
 
         /// <summary>Column pump: low rumble, water rush, and the impeller's tone.</summary>
@@ -110,7 +110,7 @@ namespace Grotto.Audio
                 value += wash * (0.6f + 0.4f * Mathf.Sin(Tau * impeller * 0.5f * t));
 
                 return value * 0.6f;
-            });
+            }, MachineryLevel);
         }
 
         /// <summary>Cavitation: the pump eating air. Irregular, hard, and wrong.</summary>
@@ -123,7 +123,7 @@ namespace Grotto.Audio
                 float crackle = rng.Chance(0.06f) ? rng.Range(-1f, 1f) : 0f;
                 float rumble = Mathf.Sin(Tau * 42f * t) * 0.2f;
                 return (crackle * 0.7f + rumble) * 0.65f;
-            });
+            }, MachineryLevel);
         }
 
         /// <summary>Monitor snow.</summary>
@@ -137,7 +137,7 @@ namespace Grotto.Audio
                 float noise = rng.Range(-1f, 1f);
                 low += (noise - low) * 0.55f;
                 return low * 0.4f;
-            });
+            }, HissLevel);
         }
 
         /// <summary>Cave room tone: a very low moving air bed with distant drips baked in.</summary>
@@ -156,7 +156,7 @@ namespace Grotto.Audio
                 value += Mathf.Sin(Tau * 57f * t + 1.2f) * 0.03f;
 
                 return value * 0.5f;
-            });
+            }, BedLevel);
         }
 
         // =====================================================================
@@ -311,7 +311,7 @@ namespace Grotto.Audio
                 float envelope = Mathf.Min(1f, t / 0.004f) * (1f - Mathf.SmoothStep(0.7f, 1f, progress));
 
                 return (cluster * ring * 0.6f + low * 0.5f) * envelope * 0.85f;
-            });
+            }, StingLevel);
         }
 
         /// <summary>The 6 AM bell. The only kind sound in the game.</summary>
@@ -338,7 +338,17 @@ namespace Grotto.Audio
 
         private const float Tau = Mathf.PI * 2f;
 
-        private static AudioClip Create(string clipName, float seconds, Func<float, int, float> sample)
+        // Target RMS per clip role. These are the mix, expressed once, in the place
+        // the waveforms are made — rather than as a pile of volume multipliers
+        // scattered through AudioDirector that each have to be re-tuned by ear.
+        private const float BedLevel = 0.030f;        // room tone: felt, not heard
+        private const float HissLevel = 0.035f;       // monitor snow
+        private const float MachineryLevel = 0.075f;  // generator, fan, pump
+        private const float OneShotLevel = 0.130f;    // drips, impacts, footfalls
+        private const float StingLevel = 0.240f;      // the jumpscare
+
+        private static AudioClip Create(string clipName, float seconds, Func<float, int, float> sample,
+            float targetRms = OneShotLevel)
         {
             int count = Mathf.Max(1, Mathf.RoundToInt(seconds * SampleRate));
             var data = new float[count];
@@ -349,7 +359,7 @@ namespace Grotto.Audio
                 data[i] = Mathf.Clamp(sample(t, i), -1f, 1f);
             }
 
-            return Finalise(clipName, data);
+            return Finalise(clipName, data, targetRms);
         }
 
         /// <summary>
@@ -358,7 +368,7 @@ namespace Grotto.Audio
         /// the noise components do not click at the seam.
         /// </summary>
         private static AudioClip CreateLoop(string clipName, float seconds, float fundamental,
-            Func<float, int, float> sample)
+            Func<float, int, float> sample, float targetRms = MachineryLevel)
         {
             // Snap to whole cycles so the tonal content is continuous across the loop.
             float cycles = Mathf.Max(1f, Mathf.Round(seconds * fundamental));
@@ -389,25 +399,52 @@ namespace Grotto.Audio
             var trimmed = new float[count - fade];
             Array.Copy(data, trimmed, trimmed.Length);
 
-            return Finalise(clipName, trimmed);
+            return Finalise(clipName, trimmed, targetRms);
         }
 
-        private static AudioClip Finalise(string clipName, float[] data)
+        /// <summary>
+        /// Normalises to a target RMS rather than a target peak.
+        ///
+        /// Peak normalisation is the obvious choice and it is wrong here. These
+        /// waveforms have wildly different crest factors: a drip is a single
+        /// transient with a high peak and almost no energy, while the cave bed is
+        /// heavily filtered noise with a low peak and constant energy. Normalising
+        /// both to the same peak makes the bed enormously louder than the drip —
+        /// which is exactly the wall of static this produced before.
+        ///
+        /// RMS tracks perceived loudness, so every clip arrives at the mixer at the
+        /// level it was meant to have. The peak ceiling then catches anything that
+        /// would clip on the way.
+        /// </summary>
+        private static AudioClip Finalise(string clipName, float[] data,
+            float targetRms, float maxPeak = 0.9f)
         {
-            // Normalise to a consistent headroom so the mixer has a predictable input.
+            double sumOfSquares = 0.0;
             float peak = 0f;
-            for (int i = 0; i < data.Length; i++) peak = Mathf.Max(peak, Mathf.Abs(data[i]));
 
-            if (peak > 0.0001f)
+            for (int i = 0; i < data.Length; i++)
             {
-                float gain = 0.85f / peak;
+                sumOfSquares += (double)data[i] * data[i];
+                peak = Mathf.Max(peak, Mathf.Abs(data[i]));
+            }
+
+            float rms = data.Length > 0 ? Mathf.Sqrt((float)(sumOfSquares / data.Length)) : 0f;
+
+            if (rms > 1e-5f && peak > 1e-5f)
+            {
+                float gain = targetRms / rms;
+
+                // Never push the loudest sample past the ceiling.
+                gain = Mathf.Min(gain, maxPeak / peak);
+
                 for (int i = 0; i < data.Length; i++) data[i] *= gain;
             }
 
             var clip = AudioClip.Create(clipName, data.Length, 1, SampleRate, stream: false);
             clip.SetData(data, 0);
 
-            GLog.Verbose(LogChannel.Audio, $"Synthesised {clipName}: {data.Length} samples.");
+            GLog.Verbose(LogChannel.Audio,
+                $"Synthesised {clipName}: {data.Length} samples, rms {rms:0.0000} -> {targetRms:0.0000}.");
             return clip;
         }
     }

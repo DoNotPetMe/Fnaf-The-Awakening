@@ -25,7 +25,7 @@ namespace Grotto.Rendering
     public sealed class PostFxController : MonoBehaviour
     {
         [Header("Baseline")]
-        [SerializeField] private float baseVignette = 0.32f;
+        [SerializeField] private float baseVignette = 0.20f;
         [SerializeField] private float baseGrain = 0.22f;
         [SerializeField] private float baseBloom = 0.55f;
 

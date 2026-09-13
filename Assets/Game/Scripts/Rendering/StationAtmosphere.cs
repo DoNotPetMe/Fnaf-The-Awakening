@@ -21,11 +21,11 @@ namespace Grotto.Rendering
         [SerializeField] private Color cleanFog = new Color(0.045f, 0.05f, 0.058f);
         [SerializeField] private Color fouledFog = new Color(0.10f, 0.105f, 0.075f);
 
-        [SerializeField] private float cleanDensity = 0.022f;
+        [SerializeField] private float cleanDensity = 0.013f;
         [SerializeField] private float fouledDensity = 0.075f;
 
         [Header("Ambient")]
-        [SerializeField] private Color ambientLit = new Color(0.048f, 0.052f, 0.062f);
+        [SerializeField] private Color ambientLit = new Color(0.10f, 0.105f, 0.12f);
         [SerializeField] private Color ambientDark = new Color(0.012f, 0.014f, 0.020f);
 
         [Tooltip("How quickly the atmosphere follows the simulation. Slow, so it is felt rather than noticed.")]

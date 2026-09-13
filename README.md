@@ -135,6 +135,10 @@ answer to each. Full node table, link gates and design notes in
 | `Esc` | Pause |
 | `` ` `` | Developer console |
 | `F3` | Debug overlay |
+| `J` | Jumpscare test picker — `←` `→` choose, `Enter` fires |
+
+The night opens on a briefing screen with the shift orders and the full control
+list. It holds the clock until you dismiss it with `Enter`.
 
 ---
 

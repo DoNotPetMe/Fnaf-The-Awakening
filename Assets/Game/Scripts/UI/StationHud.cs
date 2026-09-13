@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using Grotto.AI;
 using Grotto.Core;
@@ -47,6 +48,12 @@ namespace Grotto.UI
         private Image _waterFill; private Text _waterCaption;
         private Image _batteryFill; private Text _batteryCaption;
         private Image _lampFill; private Text _lampCaption;
+
+        private RectTransform _briefingGroup;
+        private Text _briefingTitle;
+        private Text _briefingBody;
+        private Text _briefingPrompt;
+        private bool _briefingShowing;
 
         private Text _systemsLine;
         private Text _occupiedLabel;
@@ -104,6 +111,98 @@ namespace Grotto.UI
             BuildSystemsLine();
             BuildAlertStrip();
             BuildOccupiedBar();
+            BuildBriefing();
+        }
+
+        /// <summary>
+        /// The shift orders, shown before the clock starts.
+        ///
+        /// This is the game's tutorial. It is not a separate mode or a scripted
+        /// sequence — it is the briefing the night already had, given enough room to
+        /// actually be read, with the control list beside it. The clock is held while
+        /// it is up, so nobody gets dropped into 12 AM mid-sentence.
+        /// </summary>
+        private void BuildBriefing()
+        {
+            _briefingGroup = UIFactory.Group(_canvas.transform, "Briefing");
+            _briefingGroup.SetAsLastSibling();
+
+            var backdrop = UIFactory.Panel(_briefingGroup, "Backdrop", new Color(0.015f, 0.018f, 0.022f, 0.95f));
+            UIFactory.Stretch(backdrop.rectTransform);
+
+            _briefingTitle = UIFactory.Label(_briefingGroup, "Title", "", 46, TextAnchor.UpperCenter);
+            UIFactory.Anchor(_briefingTitle.rectTransform, UIFactory.TopCentre,
+                new Vector2(0f, -60f), new Vector2(1400f, 60f));
+
+            var subtitle = UIFactory.Label(_briefingGroup, "Subtitle",
+                "GROTTO SPRINGS FAMILY FUN CAVERNS  \u2014  RECLAMATION SITE MONITOR",
+                18, TextAnchor.UpperCenter, UIFactory.InkDim);
+            UIFactory.Anchor(subtitle.rectTransform, UIFactory.TopCentre,
+                new Vector2(0f, -118f), new Vector2(1400f, 26f));
+
+            // Left: the shift orders.
+            _briefingBody = UIFactory.Label(_briefingGroup, "Body", "", 24,
+                TextAnchor.UpperLeft, UIFactory.Ink, wrap: true);
+            var bodyRect = _briefingBody.rectTransform;
+            bodyRect.anchorMin = new Vector2(0.06f, 0.28f);
+            bodyRect.anchorMax = new Vector2(0.47f, 0.80f);
+            bodyRect.offsetMin = bodyRect.offsetMax = Vector2.zero;
+
+            // Right: what the switches on the desk do.
+            var controlsTitle = UIFactory.Label(_briefingGroup, "ControlsTitle",
+                "THE DESK", 20, TextAnchor.UpperLeft, UIFactory.InkCold);
+            var controlsTitleRect = controlsTitle.rectTransform;
+            controlsTitleRect.anchorMin = new Vector2(0.53f, 0.76f);
+            controlsTitleRect.anchorMax = new Vector2(0.94f, 0.80f);
+            controlsTitleRect.offsetMin = controlsTitleRect.offsetMax = Vector2.zero;
+
+            var controls = UIFactory.Label(_briefingGroup, "Controls", ControlsReference(), 19,
+                TextAnchor.UpperLeft, UIFactory.InkDim, wrap: true);
+            var controlsRect = controls.rectTransform;
+            controlsRect.anchorMin = new Vector2(0.53f, 0.26f);
+            controlsRect.anchorMax = new Vector2(0.96f, 0.755f);
+            controlsRect.offsetMin = controlsRect.offsetMax = Vector2.zero;
+
+            // Bottom: the one thing that will kill you first.
+            var warning = UIFactory.Label(_briefingGroup, "Warning", WarningText(), 20,
+                TextAnchor.UpperCenter, UIFactory.InkWarn, wrap: true);
+            var warningRect = warning.rectTransform;
+            warningRect.anchorMin = new Vector2(0.08f, 0.11f);
+            warningRect.anchorMax = new Vector2(0.92f, 0.24f);
+            warningRect.offsetMin = warningRect.offsetMax = Vector2.zero;
+
+            _briefingPrompt = UIFactory.Label(_briefingGroup, "Prompt",
+                "PRESS  ENTER  TO BEGIN THE SHIFT", 26, TextAnchor.LowerCenter);
+            UIFactory.Anchor(_briefingPrompt.rectTransform, UIFactory.BottomCentre,
+                new Vector2(0f, 44f), new Vector2(1200f, 40f));
+
+            _briefingGroup.gameObject.SetActive(false);
+        }
+
+        private static string ControlsReference()
+        {
+            return
+                "<color=#EBA82E>SPACE</color>   raise / lower the monitor\n" +
+                "<color=#EBA82E>Q  E</color>      previous / next camera\n" +
+                "<color=#EBA82E>MOUSE</color>   look around the room\n\n" +
+                "<color=#EBA82E>A  D</color>      north / south blast door\n" +
+                "<color=#EBA82E>1 2 3</color>     floodlights: north, south, cable chase\n" +
+                "<color=#EBA82E>G</color>          sump grate bolts\n\n" +
+                "<color=#EBA82E>F</color>          ventilation fan: off / low / purge\n" +
+                "<color=#EBA82E>P</color>          sump pump\n" +
+                "<color=#EBA82E>L</color>          cap lamp\n\n" +
+                "<color=#EBA82E>R</color> (hold)  reset the main breaker\n" +
+                "<color=#EBA82E>T   Y</color>      pour a jerry can / crank the generator\n\n" +
+                "<color=#6B7280>ESC pause    ` console    F3 overlay    J jumpscare test</color>";
+        }
+
+        private static string WarningText()
+        {
+            return
+                "Everything runs off one eight kilowatt generator. Watch the LOAD gauge \u2014 " +
+                "hold it over the line and the breaker opens, and an open breaker drops <b>both</b> doors.\n" +
+                "The WATER gauge has two marks on it. Below <b>DIG</b> something can tunnel into the sump; " +
+                "above <b>SWIM</b> something else can get up the intake. There is no setting that is safe from both.";
         }
 
         private void BuildClock()
@@ -217,12 +316,53 @@ namespace Grotto.UI
 
             float dt = Time.deltaTime;
 
+            UpdateBriefing();
             UpdateClock();
             UpdateGauges();
             UpdateSystemsLine();
             UpdateOccupied();
             UpdateAlert(dt);
             UpdateMonitorBlend(dt);
+        }
+
+        private void UpdateBriefing()
+        {
+            bool shouldShow = _night != null && _night.CurrentPhase == NightController.Phase.Briefing;
+
+            if (shouldShow != _briefingShowing)
+            {
+                _briefingShowing = shouldShow;
+                _briefingGroup.gameObject.SetActive(shouldShow);
+
+                if (shouldShow)
+                {
+                    var definition = _night.CurrentDefinition;
+
+                    _briefingTitle.text = definition != null
+                        ? definition.displayName.ToUpperInvariant()
+                        : "SHIFT ORDERS";
+
+                    _briefingBody.text = definition != null ? definition.briefing : "";
+
+                    // Hold the clock until they say they are ready.
+                    _night.HoldBriefing = true;
+                }
+            }
+
+            if (!shouldShow) return;
+
+            // Pulse the prompt so it reads as waiting for input rather than frozen.
+            float pulse = 0.65f + 0.35f * Mathf.Sin(Time.unscaledTime * 3f);
+            _briefingPrompt.color = new Color(UIFactory.Ink.r, UIFactory.Ink.g, UIFactory.Ink.b, pulse);
+
+            var keyboard = Keyboard.current;
+            bool dismissed =
+                (keyboard != null && (keyboard.enterKey.wasPressedThisFrame
+                                      || keyboard.numpadEnterKey.wasPressedThisFrame
+                                      || keyboard.spaceKey.wasPressedThisFrame))
+                || (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame);
+
+            if (dismissed) _night.SkipBriefing();
         }
 
         private void UpdateClock()
