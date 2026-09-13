@@ -2,13 +2,14 @@
   "name": "Grotto.DevTools",
   "rootNamespace": "Grotto.DevTools",
   "references": [
+    "Grotto.AI",
+    "Grotto.Audio",
     "Grotto.Core",
     "Grotto.Facility",
-    "Grotto.AI",
     "Grotto.Player",
-    "Grotto.Audio",
-    "Grotto.Rendering",
     "Grotto.Procedural",
+    "Grotto.Rendering",
+    "Grotto.UI",
     "Unity.InputSystem",
     "Unity.Mathematics"
   ],

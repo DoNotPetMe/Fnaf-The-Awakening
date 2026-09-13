@@ -69,7 +69,7 @@ namespace Grotto.AI
         private void Awake()
         {
             if (cast.Count == 0)
-                GetComponentsInChildren(includeInactive: true, result: cast);
+                GetComponentsInChildren(true, cast);
 
             ServiceLocator.Register(this);
         }

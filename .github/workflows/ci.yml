@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Always runs. No Unity, no licence, no secrets — so every push gets a real
+  # signal even on a fork.
+  # ---------------------------------------------------------------------------
+  structure:
+    name: Structure and syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate project structure
+        run: python3 Tools/validate_project.py
+
+      - name: Check the manifest parses
+        run: |
+          python3 -c "import json; json.load(open('Packages/manifest.json')); print('packages manifest ok')"
+          python3 -c "import json; json.load(open('Assets/Game/AssetManifest.json')); print('asset manifest ok')"
+
+      - name: Check no binary art has crept in
+        run: |
+          # The repository is meant to stay text-only; downloaded art is gitignored.
+          # A stray committed texture or model should be caught here, not in review.
+          found=$(git ls-files -- '*.png' '*.jpg' '*.jpeg' '*.tga' '*.psd' '*.exr' '*.hdr' \
+                                  '*.fbx' '*.blend' '*.glb' '*.wav' '*.ogg' '*.mp3' '*.unitypackage' \
+                    | grep -v '^Assets/Game/Art/Downloaded/' || true)
+          if [ -n "$found" ]; then
+            echo "Binary asset files are committed to the repository:"
+            echo "$found"
+            echo ""
+            echo "The project generates its art and audio at runtime. If this is deliberate,"
+            echo "enable Git LFS (see .gitattributes) and update this check."
+            exit 1
+          fi
+          echo "no committed binary art"
+
+      - name: Report project size
+        run: |
+          echo "C# files:     $(git ls-files '*.cs' | wc -l)"
+          echo "Lines of C#:  $(git ls-files '*.cs' | xargs wc -l | tail -1 | awk '{print $1}')"
+          echo "Shaders:      $(git ls-files '*.shader' | wc -l)"
+          echo "Repo size:    $(du -sh .git | cut -f1)"
+
+  # ---------------------------------------------------------------------------
+  # Needs a Unity licence. Skipped automatically when the secrets are absent, so
+  # forks and first-time clones are not greeted by a permanently red build.
+  # ---------------------------------------------------------------------------
+  tests:
+    name: Unity edit-mode tests
+    runs-on: ubuntu-latest
+    needs: structure
+    # A repository without UNITY_LICENSE configured simply does not run this job.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.repository_owner != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Check for a Unity licence
+        id: licence
+        run: |
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::UNITY_LICENSE is not configured, so the Unity jobs are skipped."
+            echo "::notice::Add UNITY_LICENSE, UNITY_EMAIL and UNITY_PASSWORD as repository secrets to enable them."
+          fi
+
+      - uses: actions/cache@v4
+        if: steps.licence.outputs.available == 'true'
+        with:
+          path: Library
+          key: Library-${{ hashFiles('Packages/manifest.json') }}
+          restore-keys: Library-
+
+      - name: Run edit-mode tests
+        if: steps.licence.outputs.available == 'true'
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: editmode
+          artifactsPath: test-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Edit-mode test results
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.licence.outputs.available == 'true'
+        with:
+          name: test-results
+          path: test-results
+
+  # ---------------------------------------------------------------------------
+  # Manual only: a player build is slow and rarely what a push needs checking.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Player build
+    runs-on: ubuntu-latest
+    needs: tests
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Check for a Unity licence
+        id: licence
+        run: |
+          if [ -n "${{ secrets.UNITY_LICENSE }}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/cache@v4
+        if: steps.licence.outputs.available == 'true'
+        with:
+          path: Library
+          key: Library-build-${{ hashFiles('Packages/manifest.json') }}
+          restore-keys: Library-
+
+      - uses: game-ci/unity-builder@v4
+        if: steps.licence.outputs.available == 'true'
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneLinux64
+          buildName: TheAwakening
+
+      - uses: actions/upload-artifact@v4
+        if: steps.licence.outputs.available == 'true'
+        with:
+          name: TheAwakening-Linux64
+          path: build

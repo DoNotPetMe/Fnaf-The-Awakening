@@ -56,7 +56,9 @@ namespace Grotto.Procedural
 
                 var go = new GameObject($"{namePrefix}_{pair.Key}");
                 go.transform.SetParent(parent, worldPositionStays: false);
-                go.layer = layer;
+
+                // NameToLayer returns -1 for a missing layer, and assigning that throws.
+                go.layer = layer >= 0 && layer < 32 ? layer : 0;
 
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
 

@@ -329,6 +329,83 @@ def check_asmdefs() -> None:
                 warn(f"Assets/Game/Scripts/{child.name}: scripts with no assembly definition")
 
 
+def check_cross_assembly_usage() -> None:
+    """Verify every cross-assembly reference is declared in the asmdef.
+
+    This is the single most valuable check here, because it catches a genuine
+    compile error that nothing else can see without a compiler: a file that
+    `using`s another Grotto namespace whose assembly its own asmdef does not
+    reference. Unity reports it as a confusing "type or namespace not found".
+    """
+    # folder -> (assembly name, set of Grotto.* references)
+    owners: dict[Path, tuple[str, set[str]]] = {}
+    for path in ROOT.rglob("*.asmdef"):
+        if ".git" in path.parts:
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:                                # noqa: BLE001
+            continue
+        name = data.get("name")
+        if not name:
+            continue
+        refs = {r for r in data.get("references", [])
+                if isinstance(r, str) and r.startswith("Grotto.")}
+        owners[path.parent] = (name, refs)
+
+    def owning(file: Path) -> Path | None:
+        """Deepest asmdef folder containing this file — Unity's own rule."""
+        best = None
+        for folder in owners:
+            try:
+                file.relative_to(folder)
+            except ValueError:
+                continue
+            if best is None or len(folder.parts) > len(best.parts):
+                best = folder
+        return best
+
+    known = "|".join(sorted({n.split(".")[1] for n, _ in owners.values() if "." in n}))
+    if not known:
+        return
+
+    using_re = re.compile(r"^using +(Grotto\.[A-Za-z.]+) *;", re.M)
+    qualified_re = re.compile(r"\bGrotto\.(" + known + r")\.")
+
+    for path in sorted(ROOT.rglob("*.cs")):
+        if ".git" in path.parts or "Library" in path.parts:
+            continue
+
+        folder = owning(path)
+        if folder is None:
+            warn(f"{rel(path)}: not covered by any assembly definition")
+            continue
+
+        name, refs = owners[folder]
+        src = path.read_text(encoding="utf-8")
+        code = strip_csharp(src)
+        reported: set[str] = set()
+
+        for match in using_re.finditer(code):
+            namespace = match.group(1)
+            # Grotto.AI.Behaviours lives in the Grotto.AI assembly.
+            assembly = ".".join(namespace.split(".")[:2])
+            if assembly == name or assembly in refs or assembly in reported:
+                continue
+            reported.add(assembly)
+            err(f"{rel(path)}: uses '{namespace}' but assembly '{name}' "
+                f"does not reference '{assembly}'")
+
+        for match in qualified_re.finditer(code):
+            assembly = "Grotto." + match.group(1)
+            if assembly == name or assembly in refs or assembly in reported:
+                continue
+            reported.add(assembly)
+            line = code[: match.start()].count("\n") + 1
+            err(f"{rel(path)}:{line}: fully-qualified '{assembly}' but assembly "
+                f"'{name}' does not reference it")
+
+
 def check_shaders() -> int:
     count = 0
     for path in sorted(ROOT.rglob("*.shader")):
@@ -380,6 +457,7 @@ def main() -> int:
     cs = check_csharp()
     js = check_json()
     check_asmdefs()
+    check_cross_assembly_usage()
     sh = check_shaders()
     check_layout()
 

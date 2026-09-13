@@ -453,8 +453,8 @@ namespace Grotto.Editor
             root.AddComponent<DebugOverlay>();
             root.AddComponent<FreeCamera>();
 
+            // inspectAs already defaults to Walk; change it live with 'show.as'.
             var gizmos = root.AddComponent<AiDebugGizmos>();
-            Set(gizmos, "inspectAs", (int)TraversalMask.Walk);
             Set(gizmos, "nodeRadius", 0.8f);
         }
 
@@ -516,7 +516,10 @@ namespace Grotto.Editor
                     property.intValue = System.Convert.ToInt32(value);
                     break;
                 case SerializedPropertyType.Enum:
-                    property.enumValueIndex = System.Convert.ToInt32(value);
+                    // intValue, not enumValueIndex: the latter is an index into the
+                    // enum's name list, which is wrong for any [Flags] enum and only
+                    // coincidentally right for a contiguous one.
+                    property.intValue = System.Convert.ToInt32(value);
                     break;
                 case SerializedPropertyType.Boolean:
                     property.boolValue = System.Convert.ToBoolean(value);

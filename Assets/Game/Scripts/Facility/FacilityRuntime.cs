@@ -240,11 +240,9 @@ namespace Grotto.Facility
         public bool CanTraverse(FacilityLink link, NodeId from, NodeId to,
             TraversalMask capability, bool respectsBarriers = true, bool lightAverse = false)
         {
-            if (link == null) return false;
-            if ((link.Allowed & capability) == 0) return false;
-
-            float water = Water.Level01;
-            if (water < link.MinWater || water > link.MaxWater) return false;
+            // Capability and water are pure conditions, shared with the edit-mode
+            // tests so the rule cannot drift between what is tested and what runs.
+            if (!TraversalRules.IsPermitted(link, capability, Water.Level01)) return false;
 
             if (lightAverse && link.LightDeters)
             {

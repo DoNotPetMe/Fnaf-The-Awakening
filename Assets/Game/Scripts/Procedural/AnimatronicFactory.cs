@@ -58,8 +58,11 @@ namespace Grotto.Procedural
 
             int triangles = 0;
             foreach (var pair in batches)
+                // Recalculated, because AddRing gives a sphere's rings cylindrical
+                // normals — fine for a pillar, wrong for a skull.
                 triangles += pair.Value.Flush(pair.Key, pair.Key.name, addColliders: false,
-                    layer: LayerMask.NameToLayer("Animatronic"), staticGeometry: false);
+                    layer: SafeLayer("Animatronic"), recalculateNormals: true,
+                    staticGeometry: false);
 
             AttachEyes(rig, spec, scale);
             AttachCollider(root, spec, scale);
@@ -331,6 +334,7 @@ namespace Grotto.Procedural
             eyeMaterial.SetColor("_EmissionColor", spec.eyeGlow * 3.2f);
 
             var renderers = new Renderer[2];
+            int layer = SafeLayer("Animatronic");
 
             for (int side = 0; side < 2; side++)
             {
@@ -345,7 +349,7 @@ namespace Grotto.Procedural
                 go.transform.SetParent(rig.Head, worldPositionStays: false);
                 go.transform.localPosition = new Vector3(
                     (side == 0 ? -1f : 1f) * head * 0.36f, head * 0.62f, head * 0.66f);
-                go.layer = LayerMask.NameToLayer("Animatronic");
+                go.layer = layer;
 
                 go.AddComponent<MeshFilter>().sharedMesh = builder.ToMesh("EyeLamp");
                 var renderer = go.AddComponent<MeshRenderer>();
@@ -366,7 +370,7 @@ namespace Grotto.Procedural
             capsule.radius = 0.32f * spec.bulk * scale;
             capsule.center = new Vector3(0f, spec.height * 0.5f, 0f);
             capsule.isTrigger = true;     // the cast never uses physics to move
-            root.layer = LayerMask.NameToLayer("Animatronic");
+            root.layer = SafeLayer("Animatronic");
         }
 
         // =====================================================================
@@ -557,6 +561,17 @@ namespace Grotto.Procedural
         }
 
         // =====================================================================
+
+        /// <summary>
+        /// Resolves a layer by name, falling back to Default. NameToLayer returns -1
+        /// when the layer is missing, and assigning that to GameObject.layer throws —
+        /// which would turn a forgotten TagManager import into a crash.
+        /// </summary>
+        private static int SafeLayer(string layerName)
+        {
+            int layer = LayerMask.NameToLayer(layerName);
+            return layer >= 0 && layer < 32 ? layer : 0;
+        }
 
         /// <summary>
         /// Applies wear to a colour: desaturated, darkened, and mottled per part so

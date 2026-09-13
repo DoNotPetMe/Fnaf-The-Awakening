@@ -2,12 +2,13 @@
   "name": "Grotto.UI",
   "rootNamespace": "Grotto.UI",
   "references": [
+    "Grotto.AI",
+    "Grotto.Audio",
     "Grotto.Core",
     "Grotto.Facility",
-    "Grotto.AI",
     "Grotto.Player",
+    "Grotto.Procedural",
     "Grotto.Rendering",
-    "Grotto.Audio",
     "Unity.InputSystem",
     "Unity.TextMeshPro",
     "UnityEngine.UI"

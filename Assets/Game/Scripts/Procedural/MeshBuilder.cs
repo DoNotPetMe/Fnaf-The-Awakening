@@ -169,15 +169,19 @@ namespace Grotto.Procedural
                 int a0 = ringA + i, a1 = ringA + next;
                 int b0 = ringB + i, b1 = ringB + next;
 
+                // Winding follows the convention AddQuad and AddBox establish: the
+                // front face of (v0,v1,v2) is cross(v1-v0, v2-v0). With ringA before
+                // ringB along the axis, (a0,b0,b1) faces away from the axis and
+                // (a0,b1,b0) faces toward it.
                 if (inward)
-                {
-                    AddTriangle(a0, b0, b1);
-                    AddTriangle(a0, b1, a1);
-                }
-                else
                 {
                     AddTriangle(a0, b1, b0);
                     AddTriangle(a0, a1, b1);
+                }
+                else
+                {
+                    AddTriangle(a0, b0, b1);
+                    AddTriangle(a0, b1, a1);
                 }
             }
         }
@@ -196,7 +200,7 @@ namespace Grotto.Procedural
             if (!caps) return;
 
             AddDisc(top, rot * Vector3.up, radius * topRadiusScale, segments, rot);
-            AddDisc(baseCenter, rot * Vector3.down, radius, segments, rot, flip: true);
+            AddDisc(baseCenter, rot * Vector3.down, radius, segments, rot);
         }
 
         /// <summary>A cone from a base ring to a single apex.</summary>
@@ -216,10 +220,18 @@ namespace Grotto.Procedural
                 AddTriangle(ring + i, apex, ring + next);
             }
 
-            AddDisc(baseCenter, rot * Vector3.down, radius, segments, rot, flip: true);
+            AddDisc(baseCenter, rot * Vector3.down, radius, segments, rot);
         }
 
-        /// <summary>A filled circle, used for cylinder caps.</summary>
+        /// <summary>
+        /// A filled circle facing <paramref name="normal"/>.
+        ///
+        /// The winding is derived from the normal rather than left to the caller,
+        /// because "which way round does this fan go" is the single easiest thing to
+        /// get backwards in generated geometry, and a backwards cap is invisible
+        /// rather than obviously wrong. <paramref name="flip"/> reverses it explicitly
+        /// for the rare caller that wants the other face.
+        /// </summary>
         public void AddDisc(Vector3 center, Vector3 normal, float radius, int segments,
             Quaternion rotation, bool flip = false)
         {
@@ -236,11 +248,17 @@ namespace Grotto.Procedural
                     new Vector2(0.5f + Mathf.Cos(angle) * 0.5f, 0.5f + Mathf.Sin(angle) * 0.5f));
             }
 
+            // (centre, b, a) faces along the ring plane's local +Y; (centre, a, b)
+            // faces the other way. Pick whichever agrees with the requested normal.
+            bool faceAlongLocalUp = Vector3.Dot(normal, rotation * Vector3.up) >= 0f;
+            if (flip) faceAlongLocalUp = !faceAlongLocalUp;
+
             for (int i = 0; i < segments; i++)
             {
                 int a = first + i;
                 int b = first + (i + 1) % segments;
-                if (flip) AddTriangle(centreIndex, b, a);
+
+                if (faceAlongLocalUp) AddTriangle(centreIndex, b, a);
                 else AddTriangle(centreIndex, a, b);
             }
         }

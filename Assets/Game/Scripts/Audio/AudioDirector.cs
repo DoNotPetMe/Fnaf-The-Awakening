@@ -269,6 +269,11 @@ namespace Grotto.Audio
             source.volume = MathUtil.ExpDecay(source.volume, target, lambda, dt);
         }
 
+        private static readonly NodeId[] DripNodes =
+        {
+            new NodeId("SUMP"), new NodeId("RIVER"), new NodeId("DINE"), new NodeId("STATION")
+        };
+
         private float _dripTimer;
 
         private void TickIdleDrips(float dt)
@@ -279,11 +284,11 @@ namespace Grotto.Audio
             _dripTimer = Random.Range(1.4f, 5.5f);
 
             // Drips come from wherever the water actually is.
-            var nodes = _facility.Graph;
-            var candidates = new[] { new NodeId("SUMP"), new NodeId("RIVER"), new NodeId("DINE"), _facility.StationNode };
-            var node = candidates[Random.Range(0, candidates.Length)];
+            var node = DripNodes[Random.Range(0, DripNodes.Length)];
+            if (!_facility.Graph.Contains(node)) node = _facility.StationNode;
 
-            PlayAt("Drip", nodes.PositionOf(node), Random.Range(0.25f, 0.5f), Random.Range(0.85f, 1.25f));
+            PlayAt("Drip", _facility.Graph.PositionOf(node),
+                Random.Range(0.25f, 0.5f), Random.Range(0.85f, 1.25f));
         }
 
         // ---------------------------------------------------------------------

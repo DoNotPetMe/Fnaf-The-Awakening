@@ -120,13 +120,13 @@ namespace Grotto.Procedural
             // Floor: flat, because the player and the cast have to stand on it.
             mb.CurrentColor = new Color(0.8f, 0.78f, 0.74f, 1f);
             mb.AddDisc(floorCentre, Vector3.up, Mathf.Max(radiusX, radiusZ) * 0.99f, segments,
-                Quaternion.identity, flip: false);
+                Quaternion.identity);
 
             // Ceiling cap over the pinched top ring.
             mb.CurrentColor = new Color(0.4f, 0.4f, 0.4f, 1f);
             float capRadius = Mathf.Max(radiusX, radiusZ) * Mathf.Sin(Mathf.PI * 0.96f);
             mb.AddDisc(floorCentre + new Vector3(0f, height, 0f), Vector3.down,
-                Mathf.Max(0.4f, capRadius), segments, Quaternion.identity, flip: true);
+                Mathf.Max(0.4f, capRadius), segments, Quaternion.identity);
 
             mb.CurrentColor = Color.white;
         }
@@ -253,7 +253,12 @@ namespace Grotto.Procedural
             float height = node.Size.y;
 
             var axis = alongZ ? Vector3.forward : Vector3.right;
-            var ringRotation = Quaternion.LookRotation(Vector3.up, axis);
+
+            // AddRing lays its ring in the local XZ plane, so the rotation has to map
+            // local UP onto the tube axis. FromToRotation does exactly that;
+            // LookRotation preserves forward and adjusts up, which is not the same
+            // thing and only happens to work when the vectors are exactly square.
+            var ringRotation = Quaternion.FromToRotation(Vector3.up, axis);
 
             var start = node.Position - axis * (length * 0.5f) - new Vector3(0f, height * 0.35f, 0f);
 
@@ -296,7 +301,7 @@ namespace Grotto.Procedural
             bool alongZ = node.Size.z >= node.Size.x;
             float length = alongZ ? node.Size.z : node.Size.x;
             var axis = alongZ ? Vector3.forward : Vector3.right;
-            var ringRotation = Quaternion.LookRotation(Vector3.up, axis);
+            var ringRotation = Quaternion.FromToRotation(Vector3.up, axis);
 
             float radiusH = (alongZ ? node.Size.x : node.Size.z) * 0.5f;
             float radiusV = node.Size.y * 0.5f;
@@ -374,8 +379,10 @@ namespace Grotto.Procedural
             mb.CurrentColor = new Color(0.52f, 0.51f, 0.48f, 1f);
 
             var axis = direction / length;
-            var ringRotation = Quaternion.LookRotation(
-                Vector3.Cross(axis, Vector3.up).sqrMagnitude < 0.001f ? Vector3.forward : Vector3.up, axis);
+
+            // Same reasoning as BuildAdit: the ring plane must be square to the axis,
+            // and connectors run at arbitrary angles where LookRotation would skew it.
+            var ringRotation = Quaternion.FromToRotation(Vector3.up, axis);
 
             int rings = Mathf.Max(2, Mathf.RoundToInt(length / 3f));
             var ringStarts = new int[rings];
