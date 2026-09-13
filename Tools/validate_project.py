@@ -336,7 +336,13 @@ def check_shaders() -> int:
             continue
         count += 1
         src = path.read_text(encoding="utf-8")
-        if not src.lstrip().startswith("Shader"):
+
+        # ShaderLab allows a leading comment block before the Shader declaration.
+        head = "\n".join(
+            line for line in src.splitlines()
+            if line.strip() and not line.lstrip().startswith("//")
+        )
+        if not head.lstrip().startswith("Shader"):
             err(f"{rel(path)}: does not begin with a Shader declaration")
         if src.count("{") != src.count("}"):
             err(f"{rel(path)}: unbalanced braces ({src.count('{')} open, {src.count('}')} close)")
