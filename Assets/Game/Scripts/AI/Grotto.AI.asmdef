@@ -1,0 +1,19 @@
+{
+  "name": "Grotto.AI",
+  "rootNamespace": "Grotto.AI",
+  "references": [
+    "Grotto.Core",
+    "Grotto.Facility",
+    "Grotto.Procedural",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Grotto.Player",
+  "rootNamespace": "Grotto.Player",
+  "references": [
+    "Grotto.Core",
+    "Grotto.Facility",
+    "Unity.InputSystem"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

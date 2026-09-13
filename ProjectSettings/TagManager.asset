@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 2
+  tags:
+  - GameController
+  - Animatronic
+  - CameraNode
+  - BlastDoor
+  - StationPanel
+  - DevOnly
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - 
+  - Water
+  - UI
+  - 
+  - 
+  - Facility
+  - Animatronic
+  - Interactable
+  - Station
+  - CameraOnly
+  - PlayerOnly
+  - WaterSurface
+  - NoiseOccluder
+  - Prop
+  - VolumetricFog
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Default
+    uniqueID: 0
+    locked: 0

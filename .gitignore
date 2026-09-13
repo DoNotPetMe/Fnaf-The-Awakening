@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------------------
+# Unity generated
+# ---------------------------------------------------------------------------
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Never ignore Asset meta data — Unity needs it to keep references stable.
+!/[Aa]ssets/**/*.meta
+
+# ---------------------------------------------------------------------------
+# Asset Store / third-party drops
+# ---------------------------------------------------------------------------
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# Downloaded CC0 art is fetched per-machine by Tools > Grotto > Asset Fetcher.
+# Keep the folder and its manifest, ignore the payload.
+/Assets/Game/Art/Downloaded/*
+!/Assets/Game/Art/Downloaded/.gitkeep
+!/Assets/Game/Art/Downloaded/README.md
+
+# ---------------------------------------------------------------------------
+# IDE
+# ---------------------------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------------------------------------------------------------------------
+# Build artefacts
+# ---------------------------------------------------------------------------
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Python helper venvs
+.venv/
+__pycache__/

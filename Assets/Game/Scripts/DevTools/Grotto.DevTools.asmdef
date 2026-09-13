@@ -1,0 +1,24 @@
+{
+  "name": "Grotto.DevTools",
+  "rootNamespace": "Grotto.DevTools",
+  "references": [
+    "Grotto.Core",
+    "Grotto.Facility",
+    "Grotto.AI",
+    "Grotto.Player",
+    "Grotto.Audio",
+    "Grotto.Rendering",
+    "Grotto.Procedural",
+    "Unity.InputSystem",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

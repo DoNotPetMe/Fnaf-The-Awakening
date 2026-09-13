@@ -1,0 +1,17 @@
+{
+  "name": "Grotto.Facility",
+  "rootNamespace": "Grotto.Facility",
+  "references": [
+    "Grotto.Core",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
