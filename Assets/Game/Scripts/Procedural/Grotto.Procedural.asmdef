@@ -3,6 +3,7 @@
   "rootNamespace": "Grotto.Procedural",
   "references": [
     "Grotto.Core",
+    "Grotto.Facility",
     "Unity.Mathematics"
   ],
   "includePlatforms": [],

@@ -31,6 +31,12 @@ namespace Grotto.Facility
         public const float ChannelSwimmable = 0.55f;
         /// <summary>Below this the sump basin is dry enough to dig through.</summary>
         public const float SumpDiggable = 0.35f;
+        /// <summary>
+        /// Below this the basin can still be waded in and out of, but not tunnelled
+        /// through. Between the two marks Marlow can sit under the station on CAM 03
+        /// and do nothing — which is how the player learns the water dial has a shape.
+        /// </summary>
+        public const float SumpWadeable = 0.5f;
         /// <summary>Above this the crossing can no longer be walked.</summary>
         public const float CrossingDrowned = 0.75f;
 
@@ -247,9 +253,11 @@ namespace Grotto.Facility
             Link(layout, "RIVER", "SUMP", TraversalMask.Swim, seconds: 6f, noise: 0.7f,
                 minWater: 0.5f);
 
-            // Marlow's private tunnel: silt, and only while the silt is dry.
+            // Marlow's private tunnel. He can come and go while the basin is merely
+            // damp; breaking through the station floor needs it properly dry, which
+            // MarlowBehaviour.CanBreach enforces at SumpDiggable.
             Link(layout, "SUMP", "GEN", TraversalMask.Burrow, seconds: 8f, noise: 0.5f,
-                maxWater: SumpDiggable);
+                maxWater: SumpWadeable);
 
             // The long way round the back of the show cavern, dry-only.
             Link(layout, "DEEP", "STAGE", TraversalMask.Walk, seconds: 10f, noise: 0.3f,
