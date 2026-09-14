@@ -437,12 +437,22 @@ def build_character(spec: Spec) -> Mesh:
         np.array([0.40 * bulk, 0.34, 0.26 * bulk]) * scale, bevel=0.22)
 
     if spec.exposed and spec.wear > 0.4:
+        flank = 0.20 * bulk
+
+        part("Chest", (0.045, 0.042, 0.04)).rounded_box(
+            np.array([-flank, 0.10, 0]) * scale,
+            np.array([0.05, 0.24, 0.17 * bulk]) * scale, bevel=0.12)
+
         frame = part("Chest", (0.60, 0.60, 0.62), METAL)
         for i in range(3):
-            frame.cylinder(np.array([-0.09 + i * 0.09, -0.02, chest_front * 0.92]) * scale,
-                           0.018 * scale, 0.30 * scale, 6)
-        frame.cylinder(np.array([0, 0.10, chest_front * 0.92]) * scale, 0.03 * scale, 0.20 * scale, 8,
-                       euler(0, 0, 90))
+            frame.cylinder(np.array([-flank * 0.94, -0.01, (-0.05 + i * 0.05) * bulk]) * scale,
+                           0.013 * scale, 0.22 * scale, 6)
+        frame.cylinder(np.array([-flank * 0.94, 0.06, -0.07 * bulk]) * scale,
+                       0.02 * scale, 0.15 * bulk * scale, 8, euler(-90, 0, 0))
+
+        part("Chest", tuple(c * 0.9 for c in weathered(spec.shell_primary, spec, 5))).rounded_box(
+            np.array([-flank * 1.05, 0.22, 0]) * scale,
+            np.array([0.05, 0.05, 0.18 * bulk]) * scale, euler(0, 0, 22), bevel=0.2)
 
     part("Neck", (0.45, 0.46, 0.48), METAL).cylinder(
         np.array([0, -0.06, 0]) * scale, 0.062 * scale, 0.20 * scale, 10)
@@ -512,6 +522,20 @@ def build_character(spec: Spec) -> Mesh:
         [0, -head * 0.08, head * 0.44],
         [head * 0.98, head * 0.30, head * 1.05], bevel=0.28)
 
+    brow = part("Head", tuple(c * 0.88 for c in weathered(spec.shell_primary, spec, 43)))
+    for side in (-1, 1):
+        brow.rounded_box([side * head * 0.34, head * 0.95, head * 0.80],
+                         [head * 0.46, head * 0.16, head * 0.30],
+                         euler(-22, side * 7, side * -9), bevel=0.3)
+
+    nose = part("Head", (0.11, 0.10, 0.10))
+    nose.sphere([0, head * 0.45, head * 1.36], head * 0.17, 12, 9, (1.25, 0.85, 0.8))
+
+    socket = part("Head", (0.055, 0.05, 0.05))
+    for side in (-1, 1):
+        socket.sphere([side * head * 0.34, head * 0.78, head * 0.84],
+                      head * 0.26, 14, 9, (1, 1, 0.45))
+
     teeth = part("Jaw", (0.86, 0.84, 0.78), METAL)
     for i in range(6):
         teeth.box([(i - 2.5) * head * 0.24, head * 0.04, head * 0.92],
@@ -526,21 +550,26 @@ def build_character(spec: Spec) -> Mesh:
     # ---- eyes -------------------------------------------------------------
     for side in (0, 1):
         eye = part("Head", spec.eye_glow, GLOW)
-        eye.sphere([(-1 if side == 0 else 1) * head * 0.33, head * 0.66, head * 0.92],
-                   head * 0.155, 14, 12)
+        eye.sphere([(-1 if side == 0 else 1) * head * 0.34, head * 0.78, head * 0.90],
+                   head * 0.17, 16, 13)
 
     return mesh
 
 
 def dress_bear(mesh, rig, spec, scale, head, part):
     ears = part("Head", weathered(spec.shell_primary, spec, 50))
+    inner = part("Head", tuple(c * 0.8 for c in weathered(spec.shell_secondary, spec, 51)))
     for side in (-1, 1):
-        ears.sphere([side * head * 0.72, head * 1.25, -head * 0.1],
-                    head * 0.34, 12, 8, (1, 1, 0.45))
+        ears.sphere([side * head * 0.94, head * 0.98, -head * 0.08],
+                    head * 0.38, 14, 9, (1, 1, 0.42))
+        inner.sphere([side * head * 0.96, head * 0.98, -head * 0.02],
+                     head * 0.24, 12, 7, (1, 1, 0.3))
 
     hat = part("Head", (0.28, 0.22, 0.16), FABRIC)
-    hat.cylinder([0, head * 1.32, 0], head * 1.35, head * 0.08, 16)
-    hat.cylinder([0, head * 1.38, 0], head * 0.78, head * 0.62, 16, top_scale=0.92)
+    hat.cylinder([0, head * 1.30, 0], head * 1.18, head * 0.07, 18)
+    hat.cylinder([0, head * 1.35, 0], head * 0.80, head * 0.60, 18, top_scale=0.9)
+
+    part("Head", (0.42, 0.14, 0.13), FABRIC).cylinder([0, head * 1.38, 0], head * 0.83, head * 0.12, 18)
 
     part("Chest", spec.fabric, FABRIC).rounded_box(
         np.array([0, 0.06, 0.13 * spec.bulk * 0.9]) * scale,
@@ -947,7 +976,7 @@ def label(image: Image.Image, spec: Spec):
 def contact_sheet(images, specs, cell=(420, 600)):
     pad, header = 20, 92
     width = pad + (cell[0] + pad) * len(images)
-    height = header + cell[1] + pad + 54
+    height = header + cell[1] + pad + 62
 
     sheet = Image.new("RGB", (width, height), (9, 10, 13))
     draw = ImageDraw.Draw(sheet)
@@ -962,9 +991,13 @@ def contact_sheet(images, specs, cell=(420, 600)):
         sheet.paste(image.resize(cell, Image.LANCZOS), (x, header))
 
         draw.rectangle([x, header, x + cell[0], header + cell[1]], outline=(38, 38, 44))
-        draw.text((x + 6, header + cell[1] + 10), spec.name.upper(),
+
+        swatch = tuple(int(c * 255) for c in spec.eye_glow)
+        draw.rectangle([x, header + cell[1] + 12, x + 4, header + cell[1] + 46], fill=swatch)
+
+        draw.text((x + 14, header + cell[1] + 10), spec.name.upper(),
                   font=font(19, bold=True), fill=(226, 226, 230))
-        draw.text((x + 6, header + cell[1] + 34), spec.role,
+        draw.text((x + 14, header + cell[1] + 34), spec.role,
                   font=font(13), fill=(120, 120, 126))
 
     return sheet
@@ -985,11 +1018,14 @@ def main():
     images = []
     for spec in specs:
         image, triangles = render_character(spec, args.width, args.height, args.supersample)
-        image = label(image, spec)
+
+        # The contact sheet gets the unlabelled figure: it writes its own names
+        # underneath each cell, and pasting a labelled portrait into it printed
+        # every character's name twice.
+        images.append(image.copy())
 
         path = os.path.join(args.out, f"{spec.key}.png")
-        image.save(path)
-        images.append(image)
+        label(image, spec).save(path)
 
         print(f"{spec.name:<24} {triangles:>6} triangles  ->  {path}")
 

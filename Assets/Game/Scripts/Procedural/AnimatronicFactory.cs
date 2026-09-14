@@ -198,21 +198,44 @@ namespace Grotto.Procedural
             // "this has been abandoned" detail there is.
             if (spec.exposedEndoskeleton && spec.wear > 0.4f)
             {
+                // On the flank, not the sternum.
+                //
+                // The middle of the chest is where the costume goes: a waistcoat and an
+                // exposed ribcage cannot both occupy it, and the first version had them
+                // doing exactly that, with the frame poking through the fabric. The side
+                // of the ribcage is always clear, on every character, whatever it is
+                // wearing — and a panel missing from the side reads as something that
+                // came off in a struggle rather than as a costume design.
+                float flank = 0.20f * bulk;
+
+                // The cavity: a near-black recess set into the shell's side. Without it
+                // the ribs sit proud of an intact chest and read as a decal.
+                var cavity = batch(rig.Chest).For(SurfaceKind.AnimatronicShell);
+                cavity.CurrentColor = new Color(0.045f, 0.042f, 0.04f);
+                cavity.AddRoundedBox(new Vector3(-flank, 0.10f, 0f) * scale,
+                    new Vector3(0.05f, 0.24f, 0.17f * bulk) * scale, Quaternion.identity, 0.12f);
+
+                // The frame inside it, just short of the shell's own face so the lip of
+                // the opening casts across it.
                 var frame = batch(rig.Chest).For(SurfaceKind.AnimatronicMetal);
                 frame.CurrentColor = new Color(0.6f, 0.6f, 0.62f);
 
-                // +Z is forward, and the offset has to follow the chest, which is
-                // 0.26 * bulk deep. A fixed offset tuned on a heavy character leaves
-                // the frame floating in front of a slim one.
-                float chestFront = ChestFront(spec);
-
                 for (int i = 0; i < 3; i++)
                 {
-                    frame.AddCylinder(new Vector3(-0.09f + i * 0.09f, -0.02f, chestFront * 0.92f) * scale,
-                        0.018f * scale, 0.3f * scale, 6);
+                    frame.AddCylinder(new Vector3(-flank * 0.94f, -0.01f, (-0.05f + i * 0.05f) * bulk) * scale,
+                        0.013f * scale, 0.22f * scale, 6);
                 }
-                frame.AddCylinder(new Vector3(0f, 0.10f, chestFront * 0.92f) * scale,
-                    0.03f * scale, 0.2f * scale, 8, Quaternion.Euler(0f, 0f, 90f));
+
+                // One horizontal brace across them, running front to back.
+                frame.AddCylinder(new Vector3(-flank * 0.94f, 0.06f, -0.07f * bulk) * scale,
+                    0.02f * scale, 0.15f * bulk * scale, 8, Quaternion.Euler(-90f, 0f, 0f));
+
+                // And a torn edge of shell hanging off the top of the opening.
+                var lip = batch(rig.Chest).For(SurfaceKind.AnimatronicShell);
+                lip.CurrentColor = Weathered(spec.shellPrimary, spec, 5) * 0.9f;
+                lip.AddRoundedBox(new Vector3(-flank * 1.05f, 0.22f, 0f) * scale,
+                    new Vector3(0.05f, 0.05f, 0.18f * bulk) * scale,
+                    Quaternion.Euler(0f, 0f, 22f), 0.2f);
             }
 
             // Neck servo.
@@ -349,6 +372,48 @@ namespace Grotto.Procedural
             jaw.AddRoundedBox(new Vector3(0f, -head * 0.08f, head * 0.44f),
                 new Vector3(head * 0.98f, head * 0.30f, head * 1.05f), Quaternion.identity, 0.28f);
 
+            // Brow ridge. Two shallow wedges over where the eyes will go.
+            //
+            // This is the single highest-value piece of geometry on the whole model:
+            // without it the eye lamps float on a smooth dome and the face reads as a
+            // ball with lights on it. With it there is a shadow over each eye and the
+            // character has an expression, which for the cost of two boxes is a bargain.
+            var brow = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
+            brow.CurrentColor = Weathered(spec.shellPrimary, spec, 43) * 0.88f;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                brow.AddRoundedBox(
+                    new Vector3(side * head * 0.34f, head * 0.95f, head * 0.80f),
+                    new Vector3(head * 0.46f, head * 0.16f, head * 0.30f),
+                    Quaternion.Euler(-22f, side * 7f, side * -9f), 0.3f);
+            }
+
+            // Nose. Dark, slightly flattened, on the tip of the muzzle.
+            //
+            // The muzzle is an ellipsoid at (0, 0.35, 0.78) * head with radii
+            // (0.52 * 1.15, 0.52 * 0.72, 0.52 * 1.25) * head, so its tip is at
+            // z = 1.43 * head. Anything placed nearer than that is inside it — which is
+            // exactly where the first attempt at this put it, giving every character a
+            // nose that existed and could not be seen.
+            var nose = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
+            nose.CurrentColor = new Color(0.11f, 0.10f, 0.10f);
+            nose.AddSphere(new Vector3(0f, head * 0.45f, head * 1.36f), head * 0.17f, 12, 9,
+                new Vector3(1.25f, 0.85f, 0.8f));
+
+            // Sockets: a dark, slightly sunken disc behind each eye lamp.
+            //
+            // The lamp on its own is a bright dot on a lit face, and bright-on-light
+            // reads as a sticker. Put it on black and the same lamp reads as a light
+            // burning inside a head, which is the entire effect these characters are
+            // built around.
+            var socket = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
+            socket.CurrentColor = new Color(0.055f, 0.05f, 0.05f);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                socket.AddSphere(new Vector3(side * head * 0.34f, head * 0.78f, head * 0.84f),
+                    head * 0.26f, 12, 8, new Vector3(1f, 1f, 0.45f));
+            }
+
             // Teeth: square, evenly spaced, very slightly too many.
             var teeth = batch(rig.Jaw).For(SurfaceKind.AnimatronicMetal);
             teeth.CurrentColor = new Color(0.86f, 0.84f, 0.78f);
@@ -376,14 +441,22 @@ namespace Grotto.Procedural
 
                 // Socket, then the lamp inside it. The recess is what makes the glow
                 // read as coming from inside the head rather than painted on.
-                builder.AddSphere(Vector3.zero, head * 0.155f, 12, 10);
+                builder.AddSphere(Vector3.zero, head * 0.17f, 14, 11);
 
                 var go = new GameObject(side == 0 ? "Eye.L" : "Eye.R");
                 go.transform.SetParent(rig.Head, worldPositionStays: false);
-                // Far enough forward to break the skull's surface. At head * 0.66 they
-                // were entirely inside it, and the character had no eyes at all.
+
+                // Seated on the skull rather than near it. The skull is an ellipsoid at
+                // (0, head*0.55, 0) with radii (1, 0.95, 1.05) * head, so at this x and
+                // y its surface is at z = 0.95 * head; putting the centre at 0.90 leaves
+                // two thirds of the lamp proud, which is what makes it read as an eye
+                // in a socket rather than a dot painted on the face.
+                //
+                // The height matters as much as the depth: at head*0.66 they sat on top
+                // of the muzzle, which gave every character the same blank, low-browed
+                // look. head*0.78 puts them above the muzzle root, where eyes go.
                 go.transform.localPosition = new Vector3(
-                    (side == 0 ? -1f : 1f) * head * 0.33f, head * 0.66f, head * 0.92f);
+                    (side == 0 ? -1f : 1f) * head * 0.34f, head * 0.78f, head * 0.90f);
                 go.layer = layer;
 
                 go.AddComponent<MeshFilter>().sharedMesh = builder.ToMesh("EyeLamp");
@@ -417,21 +490,36 @@ namespace Grotto.Procedural
         {
             float head = HeadRadius(spec, scale);
 
-            // Round ears.
+            // Round ears, out to the side and low enough to clear the hat brim.
+            //
+            // They used to sit at head * 1.25, directly under a brim of radius
+            // head * 1.35 — so the character had ears that were geometrically present
+            // and completely invisible, which is the worst of both.
             var ears = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
             ears.CurrentColor = Weathered(spec.shellPrimary, spec, 50);
             for (int side = -1; side <= 1; side += 2)
             {
-                ears.AddSphere(new Vector3(side * head * 0.72f, head * 1.25f, -head * 0.1f),
-                    head * 0.34f, 10, 6, new Vector3(1f, 1f, 0.45f));
+                ears.AddSphere(new Vector3(side * head * 0.94f, head * 0.98f, -head * 0.08f),
+                    head * 0.38f, 12, 8, new Vector3(1f, 1f, 0.42f));
+
+                // Inner ear, one shade darker and slightly inset.
+                var inner = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
+                inner.CurrentColor = Weathered(spec.shellSecondary, spec, 51) * 0.8f;
+                inner.AddSphere(new Vector3(side * head * 0.96f, head * 0.98f, -head * 0.02f),
+                    head * 0.24f, 10, 6, new Vector3(1f, 1f, 0.3f));
             }
 
-            // Prospector's hat.
+            // Prospector's hat. Brim pulled in so the ears show under it.
             var hat = batch(rig.Head).For(SurfaceKind.AnimatronicFabric);
             hat.CurrentColor = new Color(0.28f, 0.22f, 0.16f);
-            hat.AddCylinder(new Vector3(0f, head * 1.32f, 0f), head * 1.35f, head * 0.08f, 14);
-            hat.AddCylinder(new Vector3(0f, head * 1.38f, 0f), head * 0.78f, head * 0.62f, 14,
-                topRadiusScale: 0.92f);
+            hat.AddCylinder(new Vector3(0f, head * 1.30f, 0f), head * 1.18f, head * 0.07f, 16);
+            hat.AddCylinder(new Vector3(0f, head * 1.35f, 0f), head * 0.80f, head * 0.60f, 16,
+                topRadiusScale: 0.9f);
+
+            // Hat band.
+            var band = batch(rig.Head).For(SurfaceKind.AnimatronicFabric);
+            band.CurrentColor = new Color(0.42f, 0.14f, 0.13f);
+            band.AddCylinder(new Vector3(0f, head * 1.38f, 0f), head * 0.83f, head * 0.12f, 16);
 
             // Waistcoat and bow tie — he is the host, after all.
             var vest = batch(rig.Chest).For(SurfaceKind.AnimatronicFabric);
