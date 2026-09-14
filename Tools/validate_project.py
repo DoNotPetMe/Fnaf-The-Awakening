@@ -406,6 +406,131 @@ def check_cross_assembly_usage() -> None:
                 f"'{name}' does not reference it")
 
 
+# Types that live in a namespace you have to import, and the using that provides
+# them. Only types common enough that a missing using is a real, recurring mistake —
+# a longer list would trade false positives for coverage nobody needs.
+NAMESPACE_TYPES: dict[str, tuple[str, ...]] = {
+    "System.Collections.Generic": (
+        "List", "Dictionary", "HashSet", "Queue", "Stack", "SortedList",
+        "SortedDictionary", "LinkedList", "IReadOnlyList", "IReadOnlyDictionary",
+        "IReadOnlyCollection", "IList", "IDictionary", "ISet", "IEnumerable",
+        "KeyValuePair", "Comparer", "EqualityComparer",
+    ),
+    "System": (
+        "Action", "Func", "Exception", "IDisposable", "IEquatable", "IComparable",
+        "StringComparison", "DateTime", "TimeSpan", "Convert", "Math",
+    ),
+    "System.Text": ("StringBuilder",),
+    "System.IO": ("File", "Directory", "Path", "StreamReader", "StreamWriter"),
+    "System.Linq": (),   # method-based; not detectable this way
+}
+
+
+def check_missing_usings() -> None:
+    """Catch a type used without the `using` that declares it.
+
+    This is CS0246, and it is the single most common compile error in a project
+    written without a compiler to hand. Unity reports it as "the type or namespace
+    name 'IReadOnlyList<>' could not be found", which is clear enough once you see
+    it — but you only see it after a full import, and only for the first assembly
+    that fails. Everything behind it stays hidden.
+
+    The check is deliberately conservative. A type only counts when it is used in a
+    position that cannot be anything else: `IReadOnlyList<`, `new List<`, `List<int>
+    name`. A bare identifier is ignored, because `Action` might be a local variable
+    and a false positive in a pre-commit check is worse than a miss.
+
+    Fully-qualified uses (`System.Collections.Generic.List<...>`) are fine and are
+    not reported, and neither is a type the file defines itself.
+    """
+    for path in sorted(ROOT.rglob("*.cs")):
+        if ".git" in path.parts:
+            continue
+
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        code = strip_csharp(raw)
+
+        usings = set(re.findall(r"^\s*using\s+(?:static\s+)?([\w.]+)\s*;", raw, re.M))
+
+        # `using X = Y;` aliases and anything the file declares itself.
+        declared = set(re.findall(r"\b(?:class|struct|interface|enum|record)\s+(\w+)", code))
+        declared |= set(re.findall(r"^\s*using\s+(\w+)\s*=", raw, re.M))
+
+        for namespace, types in NAMESPACE_TYPES.items():
+            if namespace in usings:
+                continue
+
+            # A parent namespace does not import a child's types in C#, but being
+            # inside `namespace System.Something` does bring System into scope.
+            file_ns = re.search(r"^\s*namespace\s+([\w.]+)", code, re.M)
+            if file_ns and (file_ns.group(1) == namespace
+                            or file_ns.group(1).startswith(namespace + ".")):
+                continue
+
+            for type_name in types:
+                if type_name in declared:
+                    continue
+
+                # Generic use, or a declaration/instantiation that can only be a type.
+                pattern = (
+                    rf"(?<![\w.]){type_name}\s*<"                      # List<...>
+                    rf"|(?<![\w.])new\s+{type_name}\s*[<(]"           # new List(...)
+                    rf"|(?<![\w.]){type_name}\.[A-Z]"                  # Path.Combine
+                )
+
+                match = re.search(pattern, code)
+                if not match:
+                    continue
+
+                line = code[: match.start()].count("\n") + 1
+                err(f"{path}:{line}: uses '{type_name}' but the file has no "
+                    f"'using {namespace};' — this is CS0246 at compile time")
+                break   # one report per namespace per file is enough to act on
+
+
+def check_unity_type_filenames() -> None:
+    """Every MonoBehaviour and ScriptableObject must live in a file of its own name.
+
+    Unity resolves a serialised component or asset back to its script *by filename*,
+    not by reflection. Put two MonoBehaviours in one file, or name the file anything
+    but the class, and the type loads at compile time but the asset referencing it
+    comes back as "the associated script cannot be loaded" — at runtime, on someone
+    else's machine, long after the change that caused it.
+
+    Nested types are exempt: they are addressed through their owner.
+    """
+    unity_bases = ("MonoBehaviour", "ScriptableObject", "EditorWindow", "Editor",
+                   "ScriptableRendererFeature", "StateMachineBehaviour")
+
+    for path in sorted(ROOT.rglob("*.cs")):
+        if ".git" in path.parts:
+            continue
+
+        code = strip_csharp(path.read_text(encoding="utf-8", errors="replace"))
+        stem = path.stem
+
+        # Class declarations at namespace level — one leading indent at most, which
+        # is what keeps nested types out of it.
+        for match in re.finditer(
+                r"^[ \t]{0,8}(?:public|internal)\s+(?:sealed\s+|abstract\s+|partial\s+)*"
+                r"class\s+(\w+)\s*:\s*([\w<>,.\s]+?)[\r\n{]",
+                code, re.M):
+
+            name, bases = match.group(1), match.group(2)
+
+            if not any(re.search(rf"(^|[\s,.]){b}\b", bases) for b in unity_bases):
+                continue
+
+            # A partial type may legitimately be split across `Name.Part.cs` files.
+            if stem == name or stem.startswith(name + "."):
+                continue
+
+            line = code[: match.start()].count("\n") + 1
+            err(f"{path}:{line}: '{name}' derives from a Unity type but the file is "
+                f"'{stem}.cs'. Unity resolves these by filename — rename the file to "
+                f"'{name}.cs' or move the class into its own.")
+
+
 def check_shaders() -> int:
     count = 0
     for path in sorted(ROOT.rglob("*.shader")):
@@ -458,6 +583,8 @@ def main() -> int:
     js = check_json()
     check_asmdefs()
     check_cross_assembly_usage()
+    check_missing_usings()
+    check_unity_type_filenames()
     sh = check_shaders()
     check_layout()
 

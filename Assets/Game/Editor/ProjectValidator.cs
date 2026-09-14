@@ -32,7 +32,11 @@ namespace Grotto.Editor
 
         private static readonly string[] RequiredTags =
         {
-            "GameController", "Animatronic", "CameraNode", "BlastDoor", "StationPanel", "DevOnly"
+            // Custom tags only. Unity's own seven — Untagged, Respawn, Finish,
+            // EditorOnly, MainCamera, Player and GameController — are built in, and
+            // re-declaring one in TagManager.asset logs "already registered" on every
+            // single import until somebody takes it out again.
+            "Animatronic", "CameraNode", "BlastDoor", "StationPanel", "DevOnly"
         };
 
         [MenuItem("Tools/Grotto/Validate Project", priority = 60)]

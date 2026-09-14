@@ -42,7 +42,6 @@ namespace Grotto.Procedural
         private static readonly Dictionary<SurfaceKind, Material> Cache = new Dictionary<SurfaceKind, Material>(16);
 
         private static Shader _litShader;
-        private static Shader _transparentShader;
         private static Shader _triplanarShader;
         private static Shader _surfaceShader;
         private static SitePalette _palette = SitePalette.Limestone;
@@ -151,7 +150,6 @@ namespace Grotto.Procedural
         {
             Cache.Clear();
             _litShader = null;
-            _transparentShader = null;
             _triplanarShader = null;
             _surfaceShader = null;
         }

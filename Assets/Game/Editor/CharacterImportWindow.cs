@@ -310,14 +310,20 @@ namespace Grotto.Editor
 
             var current = info.GetValue(_previewRig) as Transform;
 
-            var style = new GUIStyle(EditorStyles.label);
-            if (important) style.fontStyle = FontStyle.Bold;
-            else if (current == null) style.normal.textColor = new Color(0.55f, 0.55f, 0.55f);
+            // The head is the one binding that matters, so it is bold; an unmatched
+            // optional slot is greyed, so the eye skips it.
+            var label = new GUIContent(field);
+            var previous = GUI.color;
+
+            if (important) GUI.color = new Color(1f, 0.92f, 0.7f);
+            else if (current == null) GUI.color = new Color(1f, 1f, 1f, 0.55f);
 
             EditorGUI.BeginChangeCheck();
 
             var picked = (Transform)EditorGUILayout.ObjectField(
-                new GUIContent(field), current, typeof(Transform), allowSceneObjects: true);
+                label, current, typeof(Transform), allowSceneObjects: true);
+
+            GUI.color = previous;
 
             if (EditorGUI.EndChangeCheck()) info.SetValue(_previewRig, picked);
         }
