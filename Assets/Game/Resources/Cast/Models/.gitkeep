@@ -1,0 +1,11 @@
+Imported character models go here, one per character, named after the character's id:
+
+    barty.prefab       vesper.prefab      marlow.prefab
+    echo.prefab        chorus.prefab
+
+Use Tools > Grotto > Import a Character Model rather than dropping files here by hand —
+it does the scaling, the bone binding and the URP material conversion, which are the
+three things that otherwise go wrong.
+
+The contents of this folder are gitignored. See docs/MODELS.md for why, and for how to
+change that if every model you use is licensed for redistribution.

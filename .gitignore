@@ -26,6 +26,19 @@
 !/Assets/Game/Art/Downloaded/.gitkeep
 !/Assets/Game/Art/Downloaded/README.md
 
+# Imported character models.
+#
+# Ignored by default, and this is a deliberate choice rather than an oversight.
+# Whatever you download has its own licence, and a repository carrying redistributed
+# model files — especially anything extracted from a shipped game — is a repository
+# that cannot be published, put on itch, or handed to a collaborator. Keep the models
+# on your machine and the credits in git.
+#
+# If every model you use is licensed for redistribution, delete these four lines.
+/Assets/Game/Resources/Cast/Models/*
+!/Assets/Game/Resources/Cast/Models/.gitkeep
+!/Assets/Game/Resources/Cast/Models/CREDITS.md
+
 # ---------------------------------------------------------------------------
 # IDE
 # ---------------------------------------------------------------------------

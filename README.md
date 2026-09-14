@@ -9,9 +9,11 @@ something somewhere else.
 
 ![The cast](docs/renders/cast.png)
 
-*The five characters, rendered straight from `AnimatronicFactory` — the same code the
-game runs, ported to a software rasteriser so the models can be looked at without
-opening Unity. See [Rendering the cast](#rendering-the-cast).*
+*The five characters as the game generates them, rendered straight from
+`AnimatronicFactory`. **These are placeholders.** They exist so the project is playable
+and coherent out of the box, not because boxes-on-a-skeleton is the intended look —
+drop in your own models with **Tools → Grotto → Import a Character Model** and they are
+replaced. See [Using your own models](docs/MODELS.md).*
 
 ---
 
@@ -53,9 +55,14 @@ art to download — every surface and every sound is produced at runtime.
 > missing. **Tools → Grotto → Rebuild Render Pipeline** creates the three URP tiers on
 > its own if you only want that part.
 
-> **Optional:** *Tools → Grotto → Asset Fetcher* pulls curated CC0 texture sets that
-> replace the generated ones by name, with no code change. See
-> [docs/ASSETS.md](docs/ASSETS.md).
+> **Optional:**
+> *Tools → Grotto → Import a Character Model* replaces any of the five generated
+> characters with a model you downloaded — it scales it, binds whatever its bones are
+> called to the ones the game drives, and converts its materials to URP. See
+> [docs/MODELS.md](docs/MODELS.md).
+>
+> *Tools → Grotto → Asset Fetcher* pulls curated CC0 texture sets that replace the
+> generated surfaces by name, with no code change. See [docs/ASSETS.md](docs/ASSETS.md).
 
 ---
 
@@ -97,6 +104,12 @@ carries both tick marks, because a dial with invisible edges is not a decision.
 
 Five characters, each gated by a **different** system, so your answer to one exposes
 you to the next.
+
+> The generated models are placeholders. **Tools → Grotto → Import a Character Model**
+> takes an FBX or glTF from anywhere — Sketchfab, itch, the Unity Asset Store, a fan
+> modeller — fits it to the character's authored height, matches its bones however they
+> are named, and swaps it in. Nothing else in the project changes, and characters you
+> have not replaced carry on being generated. [docs/MODELS.md](docs/MODELS.md).
 
 | | Character | Route | Stopped by | Signature |
 |---|---|---|---|---|
@@ -316,10 +329,10 @@ Assets/
       Rendering/    Post FX and atmosphere
       UI/           HUD, monitor, map, geophones, front end, title stage
       DevTools/     Console, overlay, gizmos, free camera, ~50 commands
-    Editor/         Scene builder, settings builder, pipeline builder, fetcher, validator
+    Editor/         Scene builder, settings builder, pipeline builder, model importer, validator
     Shaders/        Triplanar rock, vertex-lit surfaces, water, monitor CRT, overlay
     AssetManifest.json
-  Tests/EditMode/   Simulation, navigation, sites, night systems, AI maths, persistence
+  Tests/EditMode/   Simulation, navigation, sites, night systems, rig binding, AI maths, persistence
 Tools/
   validate_project.py   C#-aware structural checker, also used by CI
   check_layouts.py      Parses the site layouts and checks them, also used by CI
@@ -354,6 +367,10 @@ The suite covers the things that fail silently:
   everyone else's rolls
 - **Persistence** — round-tripping, unlock rules, the version 1 → 2 migration, and that
   a corrupt profile is quarantined rather than deleted
+- **Rig binding** — that a downloaded model's bones are matched correctly whatever the
+  exporter called them, across Mixamo, Rigify, Source, 3ds Max Biped, hand-named fan
+  rigs and a static mesh with no skeleton at all. Heuristic code is exactly the kind
+  that rots when somebody adds a keyword to fix one rig and quietly breaks three others
 - **Sites** — properties that must hold for *every* map: no unreachable room at any
   water level, every wired role present, every character placed somewhere that exists,
   every attack node an actual approach, no approach nobody uses, and gates in an order
@@ -424,6 +441,8 @@ character's back, and an exposed ribcage poking through it.
 
 ## Where to take it next
 
+- Replace the placeholder characters with real models — the pipeline is there, it wants
+  models put through it
 - Bake occlusion culling; the chamber-and-tunnel topology suits it unusually well
 - Voice the six phone briefings (the text is in `SettingsAssetBuilder`)
 - The custom-night UI: `NightDefinition` and the save format already support it

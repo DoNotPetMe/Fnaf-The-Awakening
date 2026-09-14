@@ -22,9 +22,17 @@ namespace Grotto.AI
         [Tooltip("Attach a ServoAnimator to the generated rig.")]
         [SerializeField] private bool addServoAnimator = true;
 
+        [Tooltip("Use a model from Resources/Cast/Models/<id> when one is there. " +
+                 "Turn this off to force the generated character, which is useful for " +
+                 "comparing the two.")]
+        [SerializeField] private bool preferImported = true;
+
         private GameObject _model;
 
         public AnimatronicRig Rig { get; private set; }
+
+        /// <summary>True when this character is a downloaded model rather than a generated one.</summary>
+        public bool IsImported { get; private set; }
 
         /// <summary>Assigns the character to build. See <see cref="AnimatronicController.Configure"/>.</summary>
         public void Configure(AnimatronicDefinition characterDefinition, bool servos = true)
@@ -53,7 +61,24 @@ namespace Grotto.AI
                 return;
             }
 
-            _model = AnimatronicFactory.Build(definition.model, definition.displayName + " Model", transform);
+            // A downloaded model wins, always. Drop one at
+            // Resources/Cast/Models/<id> and it replaces the generated character with
+            // no other change — no prefab to wire, no flag to set. That is the whole
+            // contract, and it is deliberately the *only* thing you have to do.
+            if (preferImported)
+            {
+                _model = ImportedModelLibrary.Build(definition.id, definition.model,
+                    definition.displayName + " Model", transform);
+                IsImported = _model != null;
+            }
+
+            if (_model == null)
+            {
+                _model = AnimatronicFactory.Build(definition.model,
+                    definition.displayName + " Model", transform);
+                IsImported = false;
+            }
+
             Rig = _model.GetComponent<AnimatronicRig>();
 
             if (addServoAnimator && Rig != null && _model.GetComponent<ServoAnimator>() == null)
@@ -69,6 +94,7 @@ namespace Grotto.AI
 
             _model = null;
             Rig = null;
+            IsImported = false;
         }
 
 #if UNITY_EDITOR
