@@ -269,6 +269,82 @@ namespace Grotto.DevTools
         // Power
         // =====================================================================
 
+        // =====================================================================
+        // Survey and night events
+        // =====================================================================
+
+        [DevCommand("survey.info", Category = "night", Help = "Prints the survey docket.")]
+        private static string SurveyInfo(CommandArgs args)
+        {
+            var survey = Facility.Survey;
+
+            return
+                $"filed     {survey.Filed}/{survey.TargetCount}\n" +
+                $"target    {(survey.Target.IsValid ? $"{survey.Target} ({survey.TargetName})" : "none")}\n" +
+                $"progress  {survey.Progress01 * 100f:0}% {(survey.IsRecording ? "(recording)" : "")}\n" +
+                $"released  {survey.FuelReleased:0} L";
+        }
+
+        [DevCommand("survey.target", Category = "night",
+            Help = "Points the survey at a room.", Usage = "survey.target <node>")]
+        private static string SurveyTarget(CommandArgs args)
+        {
+            var node = Node(args.String(0));
+            Facility.Survey.DebugSetTarget(node);
+            return $"Survey wants {node}.";
+        }
+
+        [DevCommand("survey.file", Category = "night", Help = "Files the current reading immediately.")]
+        private static string SurveyFile(CommandArgs args)
+        {
+            var survey = Facility.Survey;
+            if (!survey.Target.IsValid) return "Nothing to file.";
+
+            string name = survey.TargetName;
+            survey.DebugFile(Facility.Power.Generator);
+            return $"Filed {name}. {survey.Filed}/{survey.TargetCount}, {survey.FuelReleased:0} L released.";
+        }
+
+        [DevCommand("night.event", Category = "night",
+            Help = "Forces a night event. 'none' ends the current one.",
+            Usage = "night.event <surge|brownout|vent|tremor|feed|none>")]
+        private static string NightEvent(CommandArgs args)
+        {
+            string wanted = args.String(0, "").ToLowerInvariant();
+
+            var kind = wanted switch
+            {
+                "surge" or "springsurge" or "water" => NightEventKind.SpringSurge,
+                "brownout" or "power" => NightEventKind.Brownout,
+                "vent" or "ventfault" or "air" => NightEventKind.VentFault,
+                "tremor" or "quake" => NightEventKind.Tremor,
+                "feed" or "feeddecay" or "cams" => NightEventKind.FeedDecay,
+                "none" or "off" or "stop" => NightEventKind.None,
+                _ => throw new System.ArgumentException(
+                    "expected surge, brownout, vent, tremor, feed or none")
+            };
+
+            Facility.Events.Force(kind);
+            return kind == NightEventKind.None ? "Event cleared." : $"{kind} running.";
+        }
+
+        [DevCommand("night.events", Category = "night", Help = "Prints the event state.")]
+        private static string NightEventState(CommandArgs args)
+        {
+            var events = Facility.Events;
+
+            if (events.Active != NightEventKind.None)
+            {
+                return $"{events.Active} — {events.Remaining:0.0}s left " +
+                       $"({events.Progress01 * 100f:0}%)\n{NightEvents.Describe(events.Active)}";
+            }
+
+            if (events.Warning != NightEventKind.None)
+                return $"{events.Warning} inbound in {events.WarningRemaining:0.0}s.";
+
+            return "Nothing running.";
+        }
+
         [DevCommand("power.info", Category = "power", Help = "Prints the electrical state and the load breakdown.")]
         private static string PowerInfo(CommandArgs args)
         {

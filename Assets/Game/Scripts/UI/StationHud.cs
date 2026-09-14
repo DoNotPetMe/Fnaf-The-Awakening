@@ -58,6 +58,11 @@ namespace Grotto.UI
         private bool _briefingShowing;
 
         private Text _systemsLine;
+
+        private Text _surveyLine;
+        private Image _surveyFill;
+        private Text _eventLine;
+        private float _eventFlash;
         private Text _occupiedLabel;
         private Image _occupiedFill;
         private RectTransform _occupiedGroup;
@@ -116,6 +121,8 @@ namespace Grotto.UI
             BuildClock();
             BuildGauges();
             BuildSystemsLine();
+            BuildSurveyPanel();
+            BuildEventBanner();
             BuildAlertStrip();
             BuildOccupiedBar();
             BuildBriefing();
@@ -141,8 +148,12 @@ namespace Grotto.UI
             UIFactory.Anchor(_briefingTitle.rectTransform, UIFactory.TopCentre,
                 new Vector2(0f, -60f), new Vector2(1400f, 60f));
 
+            string siteName = _facility.Layout != null
+                ? _facility.Layout.siteName.ToUpperInvariant()
+                : "RECLAMATION SITE";
+
             var subtitle = UIFactory.Label(_briefingGroup, "Subtitle",
-                "GROTTO SPRINGS FAMILY FUN CAVERNS  \u2014  RECLAMATION SITE MONITOR",
+                $"{siteName}  \u2014  RECLAMATION SITE MONITOR",
                 18, TextAnchor.UpperCenter, UIFactory.InkDim);
             UIFactory.Anchor(subtitle.rectTransform, UIFactory.TopCentre,
                 new Vector2(0f, -118f), new Vector2(1400f, 26f));
@@ -174,8 +185,8 @@ namespace Grotto.UI
             var warning = UIFactory.Label(_briefingGroup, "Warning", WarningText(), 20,
                 TextAnchor.UpperCenter, UIFactory.InkWarn, wrap: true);
             var warningRect = warning.rectTransform;
-            warningRect.anchorMin = new Vector2(0.08f, 0.11f);
-            warningRect.anchorMax = new Vector2(0.92f, 0.24f);
+            warningRect.anchorMin = new Vector2(0.08f, 0.10f);
+            warningRect.anchorMax = new Vector2(0.92f, 0.255f);
             warningRect.offsetMin = warningRect.offsetMax = Vector2.zero;
 
             _briefingPrompt = UIFactory.Label(_briefingGroup, "Prompt",
@@ -200,16 +211,41 @@ namespace Grotto.UI
                 "<color=#EBA82E>L</color>          cap lamp\n\n" +
                 "<color=#EBA82E>R</color> (hold)  reset the main breaker\n" +
                 "<color=#EBA82E>T   Y</color>      pour a jerry can / crank the generator\n\n" +
-                "<color=#6B7280>ESC pause    ` console    F3 overlay    J jumpscare test</color>";
+                "<color=#6B7280>ESC pause    ` console    F3 overlay    J jumpscare test</color>\n\n" +
+                "<color=#73C7DB>SURVEY</color> top left: the room the office wants a reading from.\n" +
+                "<color=#EBA82E>Under the clock</color>: a line appears a few seconds before the building\n" +
+                "does something to you. That is your warning, and it is all you get.";
         }
 
-        private static string WarningText()
+        /// <summary>
+        /// The three things that will kill a first-time player, and the one thing that
+        /// will save them.
+        ///
+        /// Written per site, because the water thresholds are a property of the
+        /// building and quoting the grotto's numbers at a player standing in a
+        /// hydroelectric station would be worse than saying nothing.
+        /// </summary>
+        private string WarningText()
         {
+            var gates = _facility.Gates;
+
+            string water = gates.SafeBand > 0.02f
+                ? $"The WATER gauge has two marks on it. Below <b>{gates.wadeable * 100f:0}%</b> something " +
+                  $"can tunnel into the sump; above <b>{gates.swimmable * 100f:0}%</b> something else can " +
+                  "swim up it. The gap between them is the only setting that shuts out both, and it is " +
+                  $"{gates.SafeBand * 100f:0} points wide."
+                : $"The WATER gauge has two marks on it, and at this site they <b>overlap</b>. Below " +
+                  $"{gates.wadeable * 100f:0}% something tunnels in; above {gates.swimmable * 100f:0}% " +
+                  "something swims in. There is no setting that is safe from both — only one you are " +
+                  "currently paying for.";
+
             return
-                "Everything runs off one eight kilowatt generator. Watch the LOAD gauge \u2014 " +
-                "hold it over the line and the breaker opens, and an open breaker drops <b>both</b> doors.\n" +
-                "The WATER gauge has two marks on it. Below <b>DIG</b> something can tunnel into the sump; " +
-                "above <b>SWIM</b> something else can get up the intake. There is no setting that is safe from both.";
+                "Everything runs off one generator. Watch the LOAD gauge \u2014 hold it over the line and " +
+                "the breaker opens, and an open breaker drops <b>both</b> doors.\n" +
+                water + "\n" +
+                "<color=#73C7DB>The survey office releases your fuel in stages.</color> Hold a camera on the " +
+                "room it asks for until the reading files. It will never ask for a room that can hurt you, " +
+                "which is exactly the problem.";
         }
 
         private void BuildClock()
@@ -291,6 +327,47 @@ namespace Grotto.UI
                 new Vector2(-26f, 26f), new Vector2(640f, 140f));
         }
 
+        /// <summary>
+        /// The survey docket: which room the office wants a reading from, and how far
+        /// through the current one you are.
+        ///
+        /// Top left, deliberately away from the clock and the gauges. It is the only
+        /// thing on the panel asking the player to *do* something optional, and putting
+        /// it in with the resource readouts would have it read as another alarm.
+        /// </summary>
+        private void BuildSurveyPanel()
+        {
+            _surveyLine = UIFactory.Label(_roomGroup, "Survey", "", 18, TextAnchor.UpperLeft,
+                UIFactory.InkCold);
+            UIFactory.Anchor(_surveyLine.rectTransform, UIFactory.TopLeft,
+                new Vector2(26f, -26f), new Vector2(520f, 44f));
+
+            var track = UIFactory.Panel(_roomGroup, "SurveyTrack", new Color(0f, 0f, 0f, 0.55f));
+            UIFactory.Anchor(track.rectTransform, UIFactory.TopLeft,
+                new Vector2(26f, -72f), new Vector2(260f, 5f));
+
+            _surveyFill = UIFactory.Panel(track.transform, "Fill", UIFactory.InkCold);
+            var fillRect = UIFactory.Stretch(_surveyFill.rectTransform);
+            fillRect.pivot = new Vector2(0f, 0.5f);
+            _surveyFill.sprite = UIFactory.BuiltinSprite;
+            _surveyFill.type = Image.Type.Filled;
+            _surveyFill.fillMethod = Image.FillMethod.Horizontal;
+            _surveyFill.fillAmount = 0f;
+        }
+
+        /// <summary>
+        /// The event banner. Centred under the clock, because an event is a fact about
+        /// the whole night rather than about one system, and because that is where the
+        /// eye already is when the hour changes.
+        /// </summary>
+        private void BuildEventBanner()
+        {
+            _eventLine = UIFactory.Label(_roomGroup, "NightEvent", "", 22, TextAnchor.UpperCenter);
+            UIFactory.Anchor(_eventLine.rectTransform, UIFactory.TopCentre,
+                new Vector2(0f, -114f), new Vector2(760f, 30f));
+            _eventLine.color = new Color(1f, 1f, 1f, 0f);
+        }
+
         private void BuildAlertStrip()
         {
             _alert = UIFactory.Label(_roomGroup, "Alert", "", 24, TextAnchor.LowerCenter);
@@ -340,6 +417,8 @@ namespace Grotto.UI
             UpdateClock();
             UpdateGauges();
             UpdateSystemsLine();
+            UpdateSurvey();
+            UpdateEvent(dt);
             UpdateOccupied();
             UpdateAlert(dt);
             UpdateMonitorBlend(dt);
@@ -471,6 +550,72 @@ namespace Grotto.UI
             builder.Append("[SPACE] MONITOR   [R] BREAKER   [T] REFUEL   [Y] CRANK");
 
             _systemsLine.text = builder.ToString();
+        }
+
+        private void UpdateSurvey()
+        {
+            var survey = _facility.Survey;
+
+            if (survey == null || survey.TargetCount <= 0)
+            {
+                _surveyLine.text = "";
+                _surveyFill.fillAmount = 0f;
+                return;
+            }
+
+            if (!survey.Target.IsValid)
+            {
+                _surveyLine.text = $"<b>SURVEY COMPLETE</b>  {survey.Filed}/{survey.TargetCount}   " +
+                                   $"·  {survey.FuelReleased:0} L released";
+                _surveyLine.color = new Color(0.55f, 0.82f, 0.58f);
+                _surveyFill.fillAmount = 0f;
+                return;
+            }
+
+            _surveyLine.text =
+                $"<b>SURVEY</b>  {survey.Filed}/{survey.TargetCount}   ·  reading wanted: " +
+                $"{survey.TargetName.ToUpperInvariant()}";
+
+            // Cold when idle, warm while it is actually counting — the one piece of
+            // feedback that tells the player the dwell is working without them having
+            // to watch a bar fill.
+            _surveyLine.color = survey.IsRecording ? UIFactory.Ink : UIFactory.InkCold;
+            _surveyFill.color = survey.IsRecording ? UIFactory.Ink : UIFactory.InkCold;
+            _surveyFill.fillAmount = survey.Progress01;
+        }
+
+        private void UpdateEvent(float dt)
+        {
+            var events = _facility.Events;
+            if (events == null) return;
+
+            string text;
+            Color colour;
+
+            if (events.Active != NightEventKind.None)
+            {
+                text = NightEvents.Describe(events.Active);
+                colour = UIFactory.ColorFor(NightEvents.SeverityOf(events.Active));
+
+                // A slow pulse while it runs. Fast enough to read as live, slow enough
+                // that it is not the thing the photosensitive setting exists to stop.
+                _eventFlash = 0.72f + Mathf.Sin(Time.time * 3.4f) * 0.18f;
+            }
+            else if (events.Warning != NightEventKind.None)
+            {
+                text = $"{NightEvents.Warn(events.Warning)}…";
+                colour = UIFactory.InkDim;
+                _eventFlash = 0.85f;
+            }
+            else
+            {
+                text = "";
+                _eventFlash = Mathf.Max(0f, _eventFlash - dt * 2.2f);
+                colour = _eventLine.color;
+            }
+
+            if (!string.IsNullOrEmpty(text)) _eventLine.text = text;
+            _eventLine.color = new Color(colour.r, colour.g, colour.b, _eventFlash);
         }
 
         private void UpdateOccupied()

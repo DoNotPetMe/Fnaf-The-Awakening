@@ -42,9 +42,22 @@ namespace Grotto.Facility
         public float EssentialLoadKilowatts { get; private set; }
 
         /// <summary>Load as a fraction of the generator's continuous rating. Can exceed 1.</summary>
+        /// <summary>
+        /// Fraction of the set's nameplate rating actually available.
+        ///
+        /// A brownout drops this rather than raising the load, which is the right way
+        /// round: the player sees the same kilowatts on the board and the headroom
+        /// shrink underneath them, which is what a labouring genset actually does and
+        /// is far more legible than a phantom load appearing from nowhere.
+        /// </summary>
+        public float CapacityScale { get; set; } = 1f;
+
+        /// <summary>Rated output right now, after any brownout.</summary>
+        public float RatedKilowatts => _tuning.generatorRatedKilowatts * Mathf.Max(0.1f, CapacityScale);
+
         public float LoadFraction => _tuning.generatorRatedKilowatts <= 0f
             ? 0f
-            : TotalLoadKilowatts / _tuning.generatorRatedKilowatts;
+            : TotalLoadKilowatts / RatedKilowatts;
 
         public float BatteryCharge01 { get; private set; } = 1f;
 
@@ -163,12 +176,12 @@ namespace Grotto.Facility
                 return;
             }
 
-            float ceiling = _tuning.generatorRatedKilowatts * _tuning.overloadFactor;
+            float ceiling = RatedKilowatts * _tuning.overloadFactor;
             if (TotalLoadKilowatts > ceiling)
             {
                 _overloadTimer += realDelta;
                 if (_overloadTimer >= _tuning.overloadGraceSeconds)
-                    TripBreaker($"Overload: {TotalLoadKilowatts:0.0} kW on an {_tuning.generatorRatedKilowatts:0.0} kW set");
+                    TripBreaker($"Overload: {TotalLoadKilowatts:0.0} kW on a {RatedKilowatts:0.0} kW set");
             }
             else
             {
@@ -220,7 +233,7 @@ namespace Grotto.Facility
         {
             if (Generator.IsSupplying && !_breakerOpen)
             {
-                float ceiling = _tuning.generatorRatedKilowatts * _tuning.overloadFactor;
+                float ceiling = RatedKilowatts * _tuning.overloadFactor;
                 return TotalLoadKilowatts > ceiling ? PowerState.Overloaded : PowerState.Online;
             }
 

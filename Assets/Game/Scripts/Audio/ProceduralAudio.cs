@@ -332,6 +332,107 @@ namespace Grotto.Audio
             });
         }
 
+        /// <summary>
+        /// The survey office acknowledging a filed reading.
+        ///
+        /// A teleprinter, not a chime. This is the only positive feedback in the game
+        /// and it would be very easy to make it feel like a mobile-game coin sound;
+        /// three dry mechanical clacks and a bell keep it in the same world as the rest
+        /// of the building.
+        /// </summary>
+        public static AudioClip SurveyFiled(int seed = 137)
+        {
+            var rng = new System.Random(seed);
+            var offsets = new[] { 0f, 0.09f, 0.17f };
+            var jitter = new float[offsets.Length];
+            for (int i = 0; i < jitter.Length; i++) jitter[i] = (float)rng.NextDouble() * 0.012f;
+
+            return Create("SFX_SurveyFiled", 1.1f, (t, i) =>
+            {
+                float value = 0f;
+
+                // Three key strikes.
+                for (int k = 0; k < offsets.Length; k++)
+                {
+                    float local = t - offsets[k] - jitter[k];
+                    if (local < 0f || local > 0.09f) continue;
+
+                    float envelope = Mathf.Exp(-90f * local);
+                    value += (Mathf.Sin(Tau * (1650f + k * 180f) * local) * 0.5f +
+                              Mathf.Sin(Tau * 3900f * local) * 0.3f) * envelope;
+                }
+
+                // Carriage bell at the end of the line.
+                float bell = t - 0.34f;
+                if (bell > 0f)
+                {
+                    float envelope = Mathf.Exp(-5.5f * bell);
+                    value += (Mathf.Sin(Tau * 2093f * bell) * 0.34f +
+                              Mathf.Sin(Tau * 3136f * bell) * 0.16f) * envelope;
+                }
+
+                return value * 0.7f;
+            });
+        }
+
+        /// <summary>
+        /// The few seconds of warning before a night event lands.
+        ///
+        /// A rising two-tone, deliberately unmusical — the interval is a tritone, which
+        /// is the one thing the ear refuses to hear as resolution. It should be
+        /// impossible to mistake for anything else on the panel.
+        /// </summary>
+        public static AudioClip EventWarning(int seed = 139)
+        {
+            return Create("SFX_EventWarning", 1.4f, (t, i) =>
+            {
+                float value = 0f;
+
+                for (int k = 0; k < 2; k++)
+                {
+                    float local = t - k * 0.42f;
+                    if (local < 0f || local > 0.36f) continue;
+
+                    float envelope = Mathf.Min(1f, local * 40f) * Mathf.Exp(-6f * local);
+                    float frequency = k == 0 ? 392f : 554.37f;   // G4 to C#5
+
+                    value += (Mathf.Sin(Tau * frequency * local) * 0.5f +
+                              Mathf.Sin(Tau * frequency * 2f * local) * 0.18f) * envelope;
+                }
+
+                return value * 0.8f;
+            });
+        }
+
+        /// <summary>
+        /// A tremor: infrasonic, long, with the rock creaking over the top of it.
+        ///
+        /// Most of the energy is below 40 Hz, where it is felt on a subwoofer and
+        /// merely implied on laptop speakers — which is correct. The creak is what
+        /// carries it on a small system.
+        /// </summary>
+        public static AudioClip Tremor(int seed = 149)
+        {
+            var rng = new System.Random(seed);
+            float phase = (float)rng.NextDouble() * Tau;
+
+            return Create("SFX_Tremor", 3.6f, (t, i) =>
+            {
+                float envelope = Mathf.Min(1f, t * 2.2f) * Mathf.Exp(-0.8f * t);
+
+                // The body of it: two very low tones beating against each other.
+                float body = Mathf.Sin(Tau * 27f * t + phase) * 0.6f +
+                             Mathf.Sin(Tau * 33f * t) * 0.4f;
+
+                // Rock complaining. Filtered noise, amplitude-modulated so it groans
+                // rather than hisses.
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                float groan = noise * (0.10f + 0.08f * Mathf.Sin(Tau * 3.1f * t));
+
+                return (body + groan) * envelope * 0.8f;
+            }, StingLevel * 0.75f);
+        }
+
         // =====================================================================
         // Machinery
         // =====================================================================

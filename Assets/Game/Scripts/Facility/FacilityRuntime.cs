@@ -31,6 +31,10 @@ namespace Grotto.Facility
 
         [SerializeField] private FacilityTuning tuning;
 
+        [Header("Night events")]
+        [Tooltip("Scales how many timed disturbances a night schedules. 0 disables them.")]
+        [Range(0f, 2f)] [SerializeField] private float eventIntensity = 1f;
+
         [Header("Fallback pacing")]
         [Tooltip("Used when no NightController is present, so the facility scene still simulates on its own.")]
         [SerializeField] private float standaloneSecondsPerHour = 60f;
@@ -53,6 +57,12 @@ namespace Grotto.Facility
         public WaterSystem Water { get; private set; }
         public NoiseField Noise { get; private set; }
         public SurveillanceSystem Surveillance { get; private set; }
+
+        /// <summary>The reclamation survey: the reason to look at a camera.</summary>
+        public SurveySystem Survey { get; private set; }
+
+        /// <summary>Timed disturbances that give the night a shape.</summary>
+        public NightEvents Events { get; private set; }
 
         /// <summary>In-game hours elapsed on the last tick. Systems that bill per hour use this.</summary>
         public float LastHourDelta { get; private set; }
@@ -120,8 +130,18 @@ namespace Grotto.Facility
             Water = new WaterSystem(tuning);
             Noise = new NoiseField(Graph, tuning);
             Surveillance = new SurveillanceSystem(Graph, tuning);
+            Survey = new SurveySystem(Graph);
+            Events = new NightEvents();
 
             Water.ConfigureSite(layout.gates, layout.startingWaterLevel);
+            Survey.ConfigureSite(layout.wiring);
+
+            // A tremor is felt at the station through however much rock is between it
+            // and the deep gallery, which is what the coupling on that node is for.
+            Events.Began += kind =>
+            {
+                if (kind == NightEventKind.Tremor) Noise.Emit(DeepNode, 1f, NoiseKind.Impact);
+            };
 
             Power.Register(Ventilation);
             Power.Register(Water);
@@ -168,13 +188,33 @@ namespace Grotto.Facility
 
         private void OnNightBegun(NightDefinition definition) => ResetForNight(definition);
 
+        /// <summary>
+        /// How many readings the survey asks for.
+        ///
+        /// Scaled with the night rather than fixed, because the value of a reading is
+        /// fuel and the fuel allowance shrinks as the campaign goes on — by night five
+        /// the survey is most of the difference between finishing on fumes and not
+        /// finishing. Capped at the size of the site's camera pool by the system itself.
+        /// </summary>
+        private static int SurveyTargetsFor(int night) => Mathf.Clamp(1 + night, 2, 6);
+
         private void ResetForNight(NightDefinition definition)
         {
-            // Night difficulty multiplied by the site's own character, so the same
-            // night plays differently at a hydro station than in a dry grain terminal.
-            _airDecayScale = (definition != null ? definition.airDecayScale : 1f) * layout.airScale;
-            _waterInflowScale = (definition != null ? definition.waterInflowScale : 1f) * layout.waterScale;
-            _fuelBurnScale = (definition != null ? definition.fuelBurnScale : 1f) * layout.fuelScale;
+            // Three multipliers, deliberately kept separate rather than folded into one
+            // number: the night says how hard *this night* is, the site says what kind
+            // of building you are in, and the player's difficulty preset says how much
+            // slack they want. Collapsing them would make any one of them impossible to
+            // tune without disturbing the other two.
+            var settings = ServiceLocator.TryGet(out SaveSystem save) ? save.Data.settings : null;
+
+            float playerWater = settings?.WaterScale ?? 1f;
+            float playerAir = settings?.AirScale ?? 1f;
+            float playerFuel = settings?.FuelScale ?? 1f;
+            float playerEvents = settings?.EventScale ?? 1f;
+
+            _airDecayScale = (definition != null ? definition.airDecayScale : 1f) * layout.airScale * playerAir;
+            _waterInflowScale = (definition != null ? definition.waterInflowScale : 1f) * layout.waterScale * playerWater;
+            _fuelBurnScale = (definition != null ? definition.fuelBurnScale : 1f) * layout.fuelScale * playerFuel;
 
             float fuel = definition != null ? definition.startingFuelLitres : tuning.fuelCapacityLitres * 0.75f;
             int cans = definition != null ? definition.spareFuelCans : 2;
@@ -184,6 +224,18 @@ namespace Grotto.Facility
             Water.ResetForNight();
             Surveillance.ResetForNight();
             Noise.Clear();
+
+            // The survey and the events both want the night's own stream, so a seeded
+            // replay asks for the same rooms and runs the same disturbances. Forked, so
+            // neither reshuffles the cast's rolls.
+            var rng = _night?.Rng ?? new RandomSource(1337);
+            int night = definition != null ? definition.night : 1;
+
+            Survey.ResetForNight(rng.Fork(4801), SurveyTargetsFor(night));
+            Events.ResetForNight(rng.Fork(9173), night, eventIntensity * playerEvents);
+
+            Power.CapacityScale = 1f;
+            Surveillance.WearScale = 1f;
 
             _lastClockElapsed = _night != null ? _night.Clock.ElapsedSeconds : 0f;
 
@@ -207,10 +259,24 @@ namespace Grotto.Facility
             //  2. the grid then sees the loads that movement implies,
             //  3. surveillance wears against the supply it just got,
             //  4. acoustics last, so every source this frame is already accounted for.
-            Ventilation.Tick(LastHourDelta, realDelta, _airDecayScale);
-            Water.Tick(LastHourDelta, realDelta, nightProgress, _waterInflowScale);
+            // Events first: they are multipliers on everything below, and applying them
+            // a frame late would mean the warning fires before the effect exists.
+            Events.Tick(_night != null && _night.IsNightRunning ? realDelta : 0f, nightProgress);
+
+            Power.CapacityScale = Events.PowerCapacityMultiplier;
+            Surveillance.WearScale = Events.FeedWearMultiplier;
+
+            Ventilation.Tick(LastHourDelta, realDelta, _airDecayScale * Events.AirDecayMultiplier);
+            Water.Tick(LastHourDelta, realDelta, nightProgress, _waterInflowScale * Events.WaterInflowMultiplier);
             Power.Tick(LastHourDelta, realDelta, _fuelBurnScale);
             Surveillance.Tick(LastHourDelta, realDelta);
+
+            Survey.Tick(
+                realDelta,
+                _night != null ? _night.Clock.Hour : 0,
+                Surveillance.MonitorUp ? Surveillance.ActiveNode : NodeId.None,
+                Surveillance.MonitorUp ? Surveillance.ConditionOf(Surveillance.ActiveNode) : 0f,
+                Power.Generator);
 
             PublishContinuousNoise();
             Noise.Tick(realDelta);

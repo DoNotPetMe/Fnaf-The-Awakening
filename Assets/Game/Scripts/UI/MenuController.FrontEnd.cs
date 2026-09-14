@@ -367,8 +367,23 @@ namespace Grotto.UI
             const float rowHeight = 44f;
             const float rowGap = 8f;
 
-            // --- Left column: audio and input -----------------------------------
+            // --- Left column: difficulty, audio, input --------------------------
             float leftY = -40f;
+            SectionLabel(screen, "DIFFICULTY", new Vector2(-300f, leftY), rowWidth);
+            leftY -= 34f;
+
+            AddDifficultyRow(screen, settings, new Vector2(-300f, leftY), rowWidth, rowHeight);
+            leftY -= rowHeight + 4f;
+
+            var difficultyNote = UIFactory.Label(screen, "DifficultyNote",
+                SettingsData.DescribeDifficulty(settings.difficulty), 15,
+                TextAnchor.UpperLeft, new Color(0.45f, 0.42f, 0.38f), wrap: true);
+            UIFactory.Anchor(difficultyNote.rectTransform, UIFactory.Centre,
+                new Vector2(-300f, leftY - 14f), new Vector2(rowWidth, 40f));
+            _difficultyNote = difficultyNote;
+
+            leftY -= 52f;
+
             SectionLabel(screen, "AUDIO", new Vector2(-300f, leftY), rowWidth);
             leftY -= 34f;
 
@@ -475,6 +490,47 @@ namespace Grotto.UI
             AddButton(column, "KEEP MY PROGRESS", BuildSettingsScreen);
 
             Show(frontEnd: true);
+        }
+
+        private Text _difficultyNote;
+
+        /// <summary>
+        /// The difficulty chooser.
+        ///
+        /// Deliberately at the top of the settings screen rather than buried under
+        /// "gameplay": it is the one setting here that changes what the game is, and a
+        /// player who wants an easier night should not have to go looking for it under
+        /// the volume sliders.
+        /// </summary>
+        private void AddDifficultyRow(RectTransform parent, SettingsData settings,
+            Vector2 position, float width, float height)
+        {
+            var presets = new[]
+            {
+                DifficultyPreset.Survey,
+                DifficultyPreset.Standard,
+                DifficultyPreset.Reclamation
+            };
+
+            var labels = new[] { "SURVEY", "STANDARD", "RECLAMATION" };
+
+            int index = System.Array.IndexOf(presets, settings.difficulty);
+            if (index < 0) index = 1;
+
+            var row = new GameObject("Difficulty", typeof(RectTransform));
+            row.transform.SetParent(parent, worldPositionStays: false);
+            row.layer = parent.gameObject.layer;
+            UIFactory.Anchor((RectTransform)row.transform, UIFactory.Centre, position,
+                new Vector2(width, height));
+
+            UIFactory.OptionRow(row.transform, "Row", "Resource difficulty",
+                new Vector2(width, height), labels, index, i =>
+                {
+                    settings.difficulty = presets[i];
+                    if (_difficultyNote != null)
+                        _difficultyNote.text = SettingsData.DescribeDifficulty(settings.difficulty);
+                    ApplySettings(settings);
+                });
         }
 
         private void AddQualityRow(RectTransform parent, SettingsData settings,

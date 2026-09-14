@@ -197,6 +197,12 @@ namespace Grotto.Facility
         // Simulation
         // ---------------------------------------------------------------------
 
+        /// <summary>
+        /// Multiplies camera wear. A multiplexer fault pushes this above 1 for the
+        /// duration of the event; nothing else touches it.
+        /// </summary>
+        public float WearScale { get; set; } = 1f;
+
         public void Tick(float hourDelta, float realDelta)
         {
             foreach (var pair in _cameras)
@@ -220,7 +226,8 @@ namespace Grotto.Facility
                 if (MonitorUp && pair.Key == ActiveNode && !(DebugFlags.IsDevBuild && DebugFlags.AllCamerasOnline))
                 {
                     float before = state.Condition01;
-                    state.Condition01 = Mathf.Max(0f, state.Condition01 - _tuning.cameraWearPerHour * hourDelta);
+                    state.Condition01 = Mathf.Max(0f,
+                        state.Condition01 - _tuning.cameraWearPerHour * hourDelta * Mathf.Max(0f, WearScale));
 
                     if (before > _tuning.cameraFailureThreshold && state.Condition01 <= _tuning.cameraFailureThreshold)
                     {

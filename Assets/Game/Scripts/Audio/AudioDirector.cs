@@ -106,6 +106,42 @@ namespace Grotto.Audio
             PlaceLoops();
             CollectDripSources();
             HookCast();
+            HookSurveyAndEvents();
+        }
+
+        /// <summary>
+        /// Gives the survey and the night events their voices.
+        ///
+        /// All three are non-spatial: they are things the station's own panel is
+        /// telling you, not things happening in a room. A warning that appears to come
+        /// from over your left shoulder would be read as a threat.
+        /// </summary>
+        private void HookSurveyAndEvents()
+        {
+            if (_facility.Survey != null)
+            {
+                _facility.Survey.ReadingFiled += (_, litres) =>
+                {
+                    if (litres <= 0f) return;
+                    PlayAt("SurveyFiled", transform.position,
+                        0.75f * masterVolume * effectsVolume, 1f, spatial: false);
+                };
+            }
+
+            if (_facility.Events == null) return;
+
+            _facility.Events.Warned += _ => PlayAt("EventWarning", transform.position,
+                0.6f * masterVolume * effectsVolume, 1f, spatial: false);
+
+            _facility.Events.Began += kind =>
+            {
+                if (kind != NightEventKind.Tremor) return;
+
+                // The tremor is the exception: it comes from the deep gallery, and
+                // where it comes from is the information.
+                PlayAt("Tremor", _facility.Graph.PositionOf(_facility.DeepNode),
+                    0.9f * masterVolume * effectsVolume, 1f, spatial: true);
+            };
         }
 
         // ---------------------------------------------------------------------
@@ -129,6 +165,9 @@ namespace Grotto.Audio
             Register("Footstep", () => ProceduralAudio.Footstep());
             Register("Jumpscare", () => ProceduralAudio.Jumpscare());
             Register("DawnChime", () => ProceduralAudio.DawnChime());
+            Register("SurveyFiled", () => ProceduralAudio.SurveyFiled());
+            Register("EventWarning", () => ProceduralAudio.EventWarning());
+            Register("Tremor", () => ProceduralAudio.Tremor());
         }
 
         private void Register(string key, System.Func<AudioClip> synthesise)

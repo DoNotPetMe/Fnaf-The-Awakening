@@ -216,6 +216,30 @@ namespace Grotto.Facility
             _ => 0f
         };
 
+        /// <summary>
+        /// Puts fuel in the day tank, capped at its capacity, and returns how much
+        /// actually went in.
+        ///
+        /// The survey uses this to release the night's fuel allowance in stages. The
+        /// cap matters: a player who banks four readings while the tank is nearly full
+        /// gets the overflow poured on the floor, which is the correct answer and is
+        /// why the returned figure is the one the HUD reports rather than the amount
+        /// asked for.
+        /// </summary>
+        public float AddFuel(float litres)
+        {
+            if (litres <= 0f) return 0f;
+
+            float before = FuelLitres;
+            FuelLitres = Mathf.Clamp(FuelLitres + litres, 0f, _tuning.fuelCapacityLitres);
+
+            // Fuel in a dry set does not restart it — somebody still has to crank —
+            // but it does move it out of "there is nothing to burn".
+            if (FuelLitres > 0f && CurrentState == State.Dry) CurrentState = State.Stalled;
+
+            return FuelLitres - before;
+        }
+
         // ---- Developer affordances ------------------------------------------
 
         public void DebugSetFuel(float litres)
