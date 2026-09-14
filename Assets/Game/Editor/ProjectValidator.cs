@@ -79,6 +79,7 @@ namespace Grotto.Editor
             ValidateLayers(problems);
             ValidateTags(warnings);
             ValidateRenderPipeline(problems, warnings);
+            ValidateSites(problems, warnings);
             ValidateSettingsAssets(problems, warnings);
             ValidateLayout(problems, warnings);
             ValidateCast(problems, warnings);
@@ -141,13 +142,39 @@ namespace Grotto.Editor
             foreach (var (path, label) in new[]
                      {
                          ($"{resources}/GameConfig.asset", "GameConfig"),
-                         ($"{resources}/FacilityTuning.asset", "FacilityTuning"),
-                         ($"{resources}/FacilityLayout_GrottoSprings.asset", "FacilityLayout")
+                         ($"{resources}/FacilityTuning.asset", "FacilityTuning")
                      })
             {
                 if (File.Exists(path)) continue;
                 problems.Add($"{label} is missing at {path}. " +
                              "Run Tools > Grotto > Rebuild Settings Assets.");
+            }
+
+            // Every site the catalog knows about. A missing layout asset is not fatal —
+            // SiteCatalog builds from code when Resources has nothing — so this is a
+            // warning rather than a problem, and it names the site.
+            for (int i = 0; i < SiteCatalog.Count; i++)
+            {
+                var entry = SiteCatalog.EntryAt(i);
+                if (File.Exists($"{resources}/{entry.ResourceName}.asset")) continue;
+
+                warnings.Add($"Site '{entry.Id}' has no baked layout asset. It will build " +
+                             "from code, which is fine, but a designer cannot tweak it in the " +
+                             "inspector until Rebuild Settings Assets has run.");
+            }
+
+            // The cast has to be under Resources now: CastSpawner loads it at runtime.
+            string castFolder = SettingsAssetBuilder.CastPath;
+            if (!Directory.Exists(castFolder))
+            {
+                problems.Add($"No character assets at {castFolder}. The cast is loaded from " +
+                             "Resources at runtime, so without them the site spawns empty. " +
+                             "Run Tools > Grotto > Rebuild Settings Assets.");
+            }
+            else if (Directory.GetFiles(castFolder, "*.asset").Length == 0)
+            {
+                problems.Add($"{castFolder} exists but is empty. Run Tools > Grotto > " +
+                             "Rebuild Settings Assets.");
             }
 
             var config = AssetDatabase.LoadAssetAtPath<GameConfig>($"{resources}/GameConfig.asset");
@@ -156,6 +183,69 @@ namespace Grotto.Editor
             for (int night = 1; night <= 6; night++)
                 if (config.GetNight(night) == null)
                     warnings.Add($"GameConfig has no definition for night {night}.");
+        }
+
+        /// <summary>
+        /// Builds every site from code and runs the graph validator over it.
+        ///
+        /// The same checks <c>python3 Tools/check_layouts.py</c> runs outside Unity, so
+        /// a map broken by an edit shows up here too rather than only in CI.
+        /// </summary>
+        private static void ValidateSites(List<string> problems, List<string> warnings)
+        {
+            for (int i = 0; i < SiteCatalog.Count; i++)
+            {
+                var entry = SiteCatalog.EntryAt(i);
+                var layout = SiteCatalog.Build(entry.Id);
+
+                try
+                {
+                    if (layout.nodes.Count == 0)
+                    {
+                        problems.Add($"Site '{entry.Id}' has no nodes.");
+                        continue;
+                    }
+
+                    foreach (var problem in layout.BuildGraph().Validate())
+                        problems.Add($"Site '{entry.Id}': {problem}");
+
+                    foreach (var (role, id) in new[]
+                             {
+                                 ("northApproach", layout.wiring.northApproach),
+                                 ("southApproach", layout.wiring.southApproach),
+                                 ("sump", layout.wiring.sump),
+                                 ("chase", layout.wiring.chase),
+                                 ("generatorBay", layout.wiring.generatorBay),
+                                 ("deepGallery", layout.wiring.deepGallery)
+                             })
+                    {
+                        if (string.IsNullOrWhiteSpace(id) || layout.FindNode(id) == null)
+                            problems.Add($"Site '{entry.Id}': wiring.{role} names '{id}', " +
+                                         "which is not a node there.");
+                    }
+
+                    foreach (var placement in layout.cast)
+                    {
+                        if (layout.FindNode(placement.homeNode) == null)
+                            problems.Add($"Site '{entry.Id}': {placement.animatronicId}'s home " +
+                                         $"'{placement.homeNode}' is not a node there.");
+
+                        foreach (var attack in placement.attackNodes)
+                            if (layout.FindNode(attack) == null)
+                                problems.Add($"Site '{entry.Id}': {placement.animatronicId} attacks " +
+                                             $"from '{attack}', which is not a node there.");
+                    }
+
+                    if (layout.gates.SafeBand < 0f)
+                        warnings.Add($"Site '{entry.Id}': the dry and wet routes overlap by " +
+                                     $"{-layout.gates.SafeBand:0.00}. Deliberate at a relentless " +
+                                     "site; a mistake anywhere else.");
+                }
+                finally
+                {
+                    Object.DestroyImmediate(layout);
+                }
+            }
         }
 
         private static void ValidateLayout(List<string> problems, List<string> warnings)

@@ -17,7 +17,7 @@ opening Unity. See [Rendering the cast](#rendering-the-cast).*
 
 ## What this repository is
 
-A complete, documented **framework** — roughly 24,000 lines of C# across eleven
+A complete, documented **framework** — roughly 26,500 lines of C# across eleven
 assemblies, five URP shaders, an editor toolchain and an edit-mode test suite — that
 builds a playable game from one menu item.
 
