@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Grotto.Core;
+using Grotto.Facility;
 
 namespace Grotto.Procedural
 {
@@ -42,6 +43,74 @@ namespace Grotto.Procedural
 
         private static Shader _litShader;
         private static Shader _transparentShader;
+        private static Shader _triplanarShader;
+        private static Shader _surfaceShader;
+        private static SitePalette _palette = SitePalette.Limestone;
+
+        /// <summary>
+        /// Which family of surfaces the current site is built from.
+        ///
+        /// Set before any geometry is generated. Changing it clears the cache, because
+        /// the palette decides the base colour, the damp tint and the tiling of every
+        /// bulk surface — a hydro station wants board-marked concrete at half a metre
+        /// per tile, not warm limestone at three.
+        /// </summary>
+        public static SitePalette Palette
+        {
+            get => _palette;
+            set
+            {
+                if (_palette == value) return;
+                _palette = value;
+                ClearCache();
+            }
+        }
+
+        /// <summary>
+        /// The triplanar rock shader, or null when it did not compile.
+        ///
+        /// Cave shells are noise-displaced rings whose UVs stretch wherever the surface
+        /// turns steeply, which in a cave is everywhere. This is the shader that fixes
+        /// that; URP Lit is the fallback, and it looks visibly worse on an overhang.
+        /// </summary>
+        private static Shader TriplanarShader
+        {
+            get
+            {
+                if (_triplanarShader != null) return _triplanarShader;
+                _triplanarShader = Shader.Find("Grotto/CaveTriplanar");
+
+                if (_triplanarShader == null)
+                    GLog.Warn(LogChannel.Procedural,
+                        "Grotto/CaveTriplanar did not compile; bulk surfaces fall back to URP Lit " +
+                        "and will show UV stretching on steep faces.");
+
+                return _triplanarShader;
+            }
+        }
+
+        /// <summary>
+        /// The UV-mapped surface shader, or null when it did not compile.
+        ///
+        /// Every generated mesh carries a per-vertex tint and a baked occlusion term
+        /// that URP's own Lit shader has nowhere to read. This is the shader that uses
+        /// them; falling back to URP Lit loses that variation but renders correctly.
+        /// </summary>
+        private static Shader SurfaceShader
+        {
+            get
+            {
+                if (_surfaceShader != null) return _surfaceShader;
+                _surfaceShader = Shader.Find("Grotto/SurfaceLit");
+
+                if (_surfaceShader == null)
+                    GLog.Warn(LogChannel.Procedural,
+                        "Grotto/SurfaceLit did not compile; per-vertex tinting and baked " +
+                        "occlusion are lost and props will render flat.");
+
+                return _surfaceShader;
+            }
+        }
 
         private static Shader LitShader
         {
@@ -83,6 +152,8 @@ namespace Grotto.Procedural
             Cache.Clear();
             _litShader = null;
             _transparentShader = null;
+            _triplanarShader = null;
+            _surfaceShader = null;
         }
 
         private static Material Build(SurfaceKind kind)
@@ -93,38 +164,41 @@ namespace Grotto.Procedural
             {
                 case SurfaceKind.CaveRock:
                     Apply(material, "CaveRock", () => TextureFactory.Limestone(), metallic: 0f, smoothness: 0.12f);
-                    SetTiling(material, 0.35f);
+                    MakeTriplanar(material, BulkTint(), BulkTiling(), smoothness: 0.12f);
                     break;
 
                 case SurfaceKind.CaveRockDamp:
                     Apply(material, "CaveRockDamp", () => TextureFactory.DampLimestone(), metallic: 0f, smoothness: 0.55f);
-                    SetTiling(material, 0.35f);
+                    MakeTriplanar(material, BulkTint() * 0.86f, BulkTiling(), smoothness: 0.55f);
                     break;
 
                 case SurfaceKind.Shotcrete:
                     Apply(material, "Shotcrete", () => TextureFactory.Shotcrete(), metallic: 0f, smoothness: 0.18f);
-                    SetTiling(material, 0.5f);
+                    MakeTriplanar(material, LiningTint(), 0.5f, smoothness: 0.18f);
                     break;
 
                 case SurfaceKind.SteelPainted:
                     Apply(material, "SteelPainted", () => TextureFactory.RustedSteel(), metallic: 0.75f, smoothness: 0.42f);
-                    SetColor(material, new Color(0.62f, 0.66f, 0.64f));
-                    SetTiling(material, 1f);
+                    MakeSurfaceLit(material, new Color(0.62f, 0.66f, 0.64f), 1f,
+                        metallic: 0.75f, smoothness: 0.42f, relief: 0.7f);
                     break;
 
                 case SurfaceKind.SteelRusted:
                     Apply(material, "SteelRusted", () => TextureFactory.RustedSteel(), metallic: 0.55f, smoothness: 0.22f);
-                    SetTiling(material, 1f);
+                    MakeSurfaceLit(material, Color.white, 1f,
+                        metallic: 0.55f, smoothness: 0.22f, relief: 1.2f);
                     break;
 
                 case SurfaceKind.ArcadeCarpet:
                     Apply(material, "ArcadeCarpet", () => TextureFactory.ArcadeCarpet(), metallic: 0f, smoothness: 0.06f);
-                    SetTiling(material, 0.6f);
+                    MakeSurfaceLit(material, Color.white, 0.6f,
+                        metallic: 0f, smoothness: 0.06f, relief: 0.5f);
                     break;
 
                 case SurfaceKind.Decking:
                     Apply(material, "Decking", () => TextureFactory.Decking(), metallic: 0f, smoothness: 0.2f);
-                    SetTiling(material, 0.8f);
+                    MakeSurfaceLit(material, Color.white, 0.8f,
+                        metallic: 0f, smoothness: 0.2f, relief: 0.9f);
                     break;
 
                 case SurfaceKind.Water:
@@ -138,22 +212,22 @@ namespace Grotto.Procedural
                     break;
 
                 case SurfaceKind.AnimatronicShell:
-                    // Moulded plastic: no texture, high smoothness, colour set per character.
-                    SetColor(material, new Color(0.55f, 0.34f, 0.20f));
-                    SetFloat(material, "_Metallic", 0.05f);
-                    SetFloat(material, "_Smoothness", 0.48f);
+                    // Moulded plastic. No texture — the colour is entirely per-vertex,
+                    // baked by AnimatronicFactory from the character's spec and its
+                    // weathering, so this shader has to be one that reads vertex colour.
+                    MakeSurfaceLit(material, new Color(0.55f, 0.34f, 0.20f), 1f,
+                        metallic: 0.05f, smoothness: 0.48f, relief: 0.35f);
                     break;
 
                 case SurfaceKind.AnimatronicMetal:
                     Apply(material, "Endoskeleton", () => TextureFactory.RustedSteel(), metallic: 0.9f, smoothness: 0.55f);
-                    SetColor(material, new Color(0.52f, 0.54f, 0.57f));
-                    SetTiling(material, 2f);
+                    MakeSurfaceLit(material, new Color(0.52f, 0.54f, 0.57f), 2f,
+                        metallic: 0.9f, smoothness: 0.55f, relief: 1.1f);
                     break;
 
                 case SurfaceKind.AnimatronicFabric:
-                    SetColor(material, new Color(0.36f, 0.28f, 0.22f));
-                    SetFloat(material, "_Metallic", 0f);
-                    SetFloat(material, "_Smoothness", 0.08f);
+                    MakeSurfaceLit(material, new Color(0.36f, 0.28f, 0.22f), 1f,
+                        metallic: 0f, smoothness: 0.08f, relief: 0.6f);
                     break;
 
                 case SurfaceKind.EmissiveWarm:
@@ -166,6 +240,134 @@ namespace Grotto.Procedural
             }
 
             return material;
+        }
+
+        // ---------------------------------------------------------------------
+        // Palette
+        // ---------------------------------------------------------------------
+
+        /// <summary>Base colour of the site's bulk surface — rock, or poured concrete.</summary>
+        private static Color BulkTint() => _palette switch
+        {
+            // Warm, slightly yellow: limestone with iron in it, lit by tungsten.
+            SitePalette.Limestone => new Color(1f, 0.96f, 0.90f),
+            // Board-marked concrete reads grey-green under the same lamps.
+            SitePalette.Concrete => new Color(0.82f, 0.86f, 0.84f),
+            // A grain terminal's bulk surface is slipformed concrete gone dusty.
+            SitePalette.Steel => new Color(0.88f, 0.85f, 0.78f),
+            _ => Color.white
+        };
+
+        /// <summary>Base colour of the lining — shotcrete, tile, galvanised sheet.</summary>
+        private static Color LiningTint() => _palette switch
+        {
+            SitePalette.Limestone => new Color(0.90f, 0.89f, 0.86f),
+            SitePalette.Concrete => new Color(0.76f, 0.80f, 0.79f),
+            SitePalette.Steel => new Color(0.80f, 0.82f, 0.85f),
+            _ => Color.white
+        };
+
+        /// <summary>
+        /// Metres per texture tile for the bulk surface.
+        ///
+        /// Natural rock has structure at every scale, so it tiles large without the
+        /// repeat becoming obvious. Poured concrete has a shutter pattern with a real
+        /// size — about half a metre — and stretching that to three reads as fog.
+        /// </summary>
+        private static float BulkTiling() => _palette switch
+        {
+            SitePalette.Limestone => 0.35f,
+            SitePalette.Concrete => 0.55f,
+            SitePalette.Steel => 0.7f,
+            _ => 0.4f
+        };
+
+        /// <summary>The colour everything below the historic waterline is stained.</summary>
+        private static Color DampTint() => _palette switch
+        {
+            SitePalette.Limestone => new Color(0.42f, 0.48f, 0.46f),
+            SitePalette.Concrete => new Color(0.34f, 0.40f, 0.44f),
+            SitePalette.Steel => new Color(0.46f, 0.40f, 0.32f),   // rust, not algae
+            _ => new Color(0.42f, 0.48f, 0.46f)
+        };
+
+        /// <summary>
+        /// Switches a bulk surface onto the triplanar shader, keeping whatever texture
+        /// <see cref="Apply"/> already resolved.
+        ///
+        /// Called after Apply rather than instead of it, so the downloaded-texture path
+        /// still works: the fetcher's albedo is projected triplanar exactly like the
+        /// generated one.
+        /// </summary>
+        private static void MakeTriplanar(Material material, Color tint, float unitsPerTile,
+            float smoothness)
+        {
+            var shader = TriplanarShader;
+            if (shader == null)
+            {
+                SetTiling(material, unitsPerTile);
+                SetColor(material, tint);
+                return;
+            }
+
+            var baseMap = material.HasProperty("_BaseMap") ? material.GetTexture("_BaseMap") : null;
+
+            material.shader = shader;
+            SetTexture(material, "_BaseMap", baseMap);
+            SetColor(material, tint);
+
+            SetFloat(material, "_Tiling", unitsPerTile <= 0f ? 1f : 1f / unitsPerTile);
+            SetFloat(material, "_BlendSharpness", 5f);
+            SetFloat(material, "_Smoothness", smoothness);
+            SetFloat(material, "_Metallic", 0f);
+
+            // Detail relief runs about seven times finer than the albedo grain, which
+            // is roughly the ratio between the pitting you see at arm's length and the
+            // bedding you see across a room.
+            SetFloat(material, "_DetailTiling", (unitsPerTile <= 0f ? 1f : 1f / unitsPerTile) * 7f);
+            SetFloat(material, "_DetailStrength", _palette == SitePalette.Limestone ? 1.25f : 0.8f);
+
+            // And a very low frequency pass for regional tone: one tile per twenty-odd
+            // metres, so a big cavern is not one flat colour.
+            SetFloat(material, "_MacroTiling", 0.045f);
+            SetFloat(material, "_MacroContrast", _palette == SitePalette.Limestone ? 0.4f : 0.22f);
+
+            SetFloat(material, "_OcclusionStrength", 1f);
+            SetFloat(material, "_VertexColorStrength", 1f);
+
+            if (material.HasProperty("_DampColor")) material.SetColor("_DampColor", DampTint());
+            SetFloat(material, "_DampHeight", -4f);
+            SetFloat(material, "_DampFalloff", 2.5f);
+        }
+
+        /// <summary>
+        /// Switches a UV-mapped surface onto the vertex-aware lit shader, keeping
+        /// whatever texture <see cref="Apply"/> already resolved.
+        /// </summary>
+        private static void MakeSurfaceLit(Material material, Color tint, float unitsPerTile,
+            float metallic, float smoothness, float relief)
+        {
+            var shader = SurfaceShader;
+            if (shader == null)
+            {
+                SetColor(material, tint);
+                SetTiling(material, unitsPerTile);
+                return;
+            }
+
+            var baseMap = material.HasProperty("_BaseMap") ? material.GetTexture("_BaseMap") : null;
+
+            material.shader = shader;
+            SetTexture(material, "_BaseMap", baseMap);
+            SetColor(material, tint);
+
+            SetFloat(material, "_Metallic", metallic);
+            SetFloat(material, "_Smoothness", smoothness);
+            SetFloat(material, "_DetailStrength", relief);
+            SetFloat(material, "_VertexColorStrength", 1f);
+            SetFloat(material, "_OcclusionStrength", 1f);
+
+            SetTiling(material, unitsPerTile);
         }
 
         // ---------------------------------------------------------------------

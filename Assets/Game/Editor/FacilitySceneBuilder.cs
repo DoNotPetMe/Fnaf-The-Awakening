@@ -57,6 +57,10 @@ namespace Grotto.Editor
 
         public static void Build()
         {
+            // The pipeline first: URP-targeted shaders render magenta without one, and
+            // a scene built into the built-in pipeline looks broken for a reason that
+            // has nothing to do with the scene.
+            RenderPipelineBuilder.Rebuild();
             SettingsAssetBuilder.Rebuild();
 
             var tuning = AssetDatabase.LoadAssetAtPath<FacilityTuning>(
@@ -232,13 +236,38 @@ namespace Grotto.Editor
 
         private static void SetupRenderSettings()
         {
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.048f, 0.052f, 0.062f);
+            // Trilight rather than flat.
+            //
+            // A single flat ambient term lights the top and the underside of every
+            // surface identically, which is the fastest way to make a generated
+            // interior look like untextured grey boxes. A gradient costs nothing and
+            // gives the one thing ambient light can give for free: a direction. Cold
+            // from above, because what little light reaches these places comes down
+            // shafts; warmer and dimmer from below, because the floor is wet rock and
+            // bounces almost nothing.
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.052f, 0.062f, 0.082f);
+            RenderSettings.ambientEquatorColor = new Color(0.040f, 0.042f, 0.048f);
+            RenderSettings.ambientGroundColor = new Color(0.030f, 0.026f, 0.022f);
+            RenderSettings.ambientIntensity = 1f;
+
+            // Exponential squared, tuned so a forty-metre cavern fades to about half
+            // at the far wall and a corridor stays legible end to end. The colour is
+            // deliberately slightly blue: warm fog under warm lamps flattens the image.
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogColor = new Color(0.045f, 0.05f, 0.058f);
-            RenderSettings.fogDensity = 0.022f;
+            RenderSettings.fogColor = new Color(0.042f, 0.048f, 0.060f);
+            RenderSettings.fogDensity = 0.020f;
+
             RenderSettings.skybox = null;
+
+            // Reflections have nowhere to come from — there is no skybox and no probe —
+            // so anything smooth would otherwise reflect Unity's default grey sky and
+            // read as chrome. A near-black custom reflection keeps wet rock and painted
+            // steel dark, which is what they should be.
+            RenderSettings.defaultReflectionMode = UnityEngine.Rendering.DefaultReflectionMode.Custom;
+            RenderSettings.customReflectionTexture = null;
+            RenderSettings.reflectionIntensity = 0.25f;
         }
 
         private static void AddToBuildSettings()

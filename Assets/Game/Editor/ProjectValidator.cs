@@ -114,7 +114,7 @@ namespace Grotto.Editor
                 problems.Add(
                     "No render pipeline asset is assigned in Project Settings > Graphics. " +
                     "The project's shaders target URP and will render magenta without one. " +
-                    "Create one with Assets > Create > Rendering > URP Asset (with Universal Renderer).");
+                    "Run Tools > Grotto > Rebuild Render Pipeline.");
                 return;
             }
 
@@ -124,7 +124,7 @@ namespace Grotto.Editor
 
             foreach (var shaderName in new[]
                      {
-                         "Grotto/CaveTriplanar", "Grotto/WaterSurface",
+                         "Grotto/CaveTriplanar", "Grotto/SurfaceLit", "Grotto/WaterSurface",
                          "Grotto/MonitorFeed", "Grotto/StationOverlay"
                      })
             {

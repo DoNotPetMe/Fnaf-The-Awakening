@@ -1,36 +1,40 @@
-// Triplanar-projected rock for the cave shells.
+// UV-mapped lit surface that actually uses the vertex data the generators produce.
 //
-// The cavern meshes are noise-displaced rings whose UVs stretch badly wherever the
-// surface turns steeply — which, in a cave, is everywhere. Projecting the texture
-// from the three world axes and blending by the world normal sidesteps UVs entirely,
-// so the rock keeps a consistent grain over overhangs, breakdown and ceiling domes.
+// Everything in this game is generated, and MeshBuilder writes two things into every
+// vertex that URP's own Lit shader has nowhere to put:
 //
-// Because the projection is in world space, adjacent chambers share a continuous
-// grain across their seams for free.
-Shader "Grotto/CaveTriplanar"
+//   * RGB — the per-vertex tint the factories bake in. Wear on a character's shell,
+//     mineral staining on a prop, the darker underside of a deck. Without a shader
+//     that reads it, a whole layer of authored variation is computed and thrown away,
+//     and every steel fitting in the building is exactly the same colour.
+//
+//   * Alpha — the curvature occlusion baked by MeshBuilder.BakeVertexOcclusion. On a
+//     character that is the darkening in the joint creases, the eye sockets and the
+//     gaps between shell plates, which is most of what stops a generated model from
+//     looking like injection-moulded plastic.
+//
+// It also carries the same derivative-based detail normal as the cave shader, so a
+// rusted steel plate has relief under a moving lamp rather than being a flat decal.
+//
+// This is deliberately not a Shader Graph. A .shadergraph is a large binary-ish JSON
+// blob that cannot be reviewed in a diff and cannot be edited without opening Unity,
+// which is the whole thing this project is arranged to avoid.
+Shader "Grotto/SurfaceLit"
 {
     Properties
     {
         [MainTexture] _BaseMap("Base Map", 2D) = "white" {}
         [MainColor]   _BaseColor("Base Colour", Color) = (1,1,1,1)
 
-        _Tiling("World Tiling (tiles per metre)", Float) = 0.35
-        _BlendSharpness("Projection Sharpness", Range(1, 16)) = 4
-
         _Metallic("Metallic", Range(0,1)) = 0
-        _Smoothness("Smoothness", Range(0,1)) = 0.12
-
-        _DampColor("Damp Tint", Color) = (0.42, 0.48, 0.46, 1)
-        _DampHeight("Damp Height (world Y)", Float) = -4
-        _DampFalloff("Damp Falloff (metres)", Float) = 2.5
+        _Smoothness("Smoothness", Range(0,1)) = 0.3
 
         _VertexColorStrength("Vertex Colour Strength", Range(0,1)) = 1
         _OcclusionStrength("Baked Occlusion Strength", Range(0,1)) = 1
 
-        _DetailTiling("Detail Tiling (tiles per metre)", Float) = 2.4
-        _DetailStrength("Detail Relief", Range(0,3)) = 1.1
-        _MacroTiling("Macro Tiling (tiles per metre)", Float) = 0.045
-        _MacroContrast("Macro Contrast", Range(0,1)) = 0.35
+        _DetailStrength("Detail Relief", Range(0,3)) = 0.8
+
+        _EmissionColor("Emission", Color) = (0,0,0,0)
 
         // Declared for the shared material CBUFFER used by the shadow and depth passes.
         _Cutoff("Alpha Cutoff", Range(0,1)) = 0.5
@@ -50,23 +54,15 @@ Shader "Grotto/CaveTriplanar"
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-        // One CBUFFER shared by every pass keeps the SRP Batcher compatible.
         CBUFFER_START(UnityPerMaterial)
             float4 _BaseMap_ST;
             half4  _BaseColor;
-            half4  _DampColor;
-            float  _Tiling;
-            half   _BlendSharpness;
+            half4  _EmissionColor;
             half   _Metallic;
             half   _Smoothness;
-            float  _DampHeight;
-            float  _DampFalloff;
             half   _VertexColorStrength;
             half   _OcclusionStrength;
-            float  _DetailTiling;
             half   _DetailStrength;
-            float  _MacroTiling;
-            half   _MacroContrast;
             half   _Cutoff;
         CBUFFER_END
 
@@ -80,8 +76,8 @@ Shader "Grotto/CaveTriplanar"
 
             HLSLPROGRAM
             #pragma target 3.0
-            #pragma vertex TriplanarVertex
-            #pragma fragment TriplanarFragment
+            #pragma vertex SurfaceVertex
+            #pragma fragment SurfaceFragment
 
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
@@ -91,6 +87,7 @@ Shader "Grotto/CaveTriplanar"
             #pragma multi_compile _ LIGHTMAP_ON
             #pragma multi_compile _ DIRLIGHTMAP_COMBINED
             #pragma multi_compile_fog
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -98,6 +95,7 @@ Shader "Grotto/CaveTriplanar"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
+                float2 uv         : TEXCOORD0;
                 float4 color      : COLOR;
                 float2 lightmapUV : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -108,14 +106,15 @@ Shader "Grotto/CaveTriplanar"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS   : TEXCOORD1;
-                float4 color      : TEXCOORD2;
-                float  fogCoord   : TEXCOORD3;
-                DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, 4);
+                float2 uv         : TEXCOORD2;
+                float4 color      : TEXCOORD3;
+                float  fogCoord   : TEXCOORD4;
+                DECLARE_LIGHTMAP_OR_SH(lightmapUV, vertexSH, 5);
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
-            Varyings TriplanarVertex(Attributes input)
+            Varyings SurfaceVertex(Attributes input)
             {
                 Varyings output = (Varyings)0;
 
@@ -129,6 +128,7 @@ Shader "Grotto/CaveTriplanar"
                 output.positionCS = positions.positionCS;
                 output.positionWS = positions.positionWS;
                 output.normalWS = normals.normalWS;
+                output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
                 output.color = input.color;
                 output.fogCoord = ComputeFogFactor(positions.positionCS.z);
 
@@ -138,53 +138,18 @@ Shader "Grotto/CaveTriplanar"
                 return output;
             }
 
-            float3 ProjectionBlend(float3 normalWS)
+            // Derivative bump mapping: the luminance of the albedo is treated as a
+            // height field and its screen-space gradient projected onto the surface.
+            // Same technique as the cave shader; see CaveTriplanar.shader for the long
+            // version of why this beats shipping a normal map we would have to commit
+            // as a binary.
+            float3 PerturbNormal(float3 normalWS, float3 positionWS, half3 sampled)
             {
-                float3 blend = pow(abs(normalWS), _BlendSharpness);
-                return blend / max(blend.x + blend.y + blend.z, 1e-4);
-            }
+                float height = dot(sampled, half3(0.299, 0.587, 0.114));
 
-            // Samples the base map projected from all three world axes and blends by
-            // the world normal, so steep faces never show UV stretching.
-            half3 SampleTriplanar(float3 positionWS, float3 blend, float tiling)
-            {
-                float2 uvX = positionWS.zy * tiling;
-                float2 uvY = positionWS.xz * tiling;
-                float2 uvZ = positionWS.xy * tiling;
-
-                half3 x = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvX).rgb;
-                half3 y = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvY).rgb;
-                half3 z = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uvZ).rgb;
-
-                return x * blend.x + y * blend.y + z * blend.z;
-            }
-
-            // Perturbs the geometric normal using the screen-space gradient of the
-            // sampled height.
-            //
-            // The generated rock has no normal map and never will — one would be a
-            // binary asset, which this project does not ship. But the base texture
-            // already encodes the grain, and its luminance is a perfectly good height
-            // field. Differentiating that field along the screen axes and projecting
-            // the gradient onto the surface gives a normal perturbation that responds
-            // correctly to the light, at the cost of two derivatives.
-            //
-            // This is the "derivative bump mapping" that predates normal maps. It is
-            // scale-correct for free — the derivatives are already in the right units —
-            // and because it runs on whatever the triplanar sampler produced, it works
-            // over seams and overhangs exactly as well as the albedo does.
-            float3 PerturbNormal(float3 normalWS, float3 positionWS, float3 blend)
-            {
-                half3 detail = SampleTriplanar(positionWS, blend, _DetailTiling);
-                float height = dot(detail, half3(0.299, 0.587, 0.114));
-
-                // Screen-space gradient of the height field.
                 float dhdx = ddx(height);
                 float dhdy = ddy(height);
 
-                // Surface tangents implied by the same screen axes. Normalising by the
-                // position derivative keeps the relief constant as the camera moves,
-                // rather than flattening out with distance.
                 float3 dpdx = ddx(positionWS);
                 float3 dpdy = ddy(positionWS);
 
@@ -194,42 +159,23 @@ Shader "Grotto/CaveTriplanar"
 
                 float3 gradient = (r1 * dhdx + r2 * dhdy) / max(abs(determinant), 1e-6);
 
-                return normalize(normalWS - gradient * _DetailStrength * 0.06);
+                return normalize(normalWS - gradient * _DetailStrength * 0.05);
             }
 
-            half4 TriplanarFragment(Varyings input) : SV_Target
+            half4 SurfaceFragment(Varyings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-                float3 geometricNormalWS = normalize(input.normalWS);
-                float3 blend = ProjectionBlend(geometricNormalWS);
+                half4 sampled = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
 
-                half3 albedo = SampleTriplanar(input.positionWS, blend, _Tiling) * _BaseColor.rgb;
+                half3 albedo = sampled.rgb * _BaseColor.rgb;
+                albedo *= lerp(half3(1, 1, 1), input.color.rgb, _VertexColorStrength);
 
-                // A second, very low frequency projection. Real rock is not uniform
-                // over forty metres: there are lighter and darker regions on a scale
-                // much bigger than the grain, and without them a large cavern reads as
-                // one flat tone however good the close-up detail is.
-                half3 macro = SampleTriplanar(input.positionWS, blend, _MacroTiling);
-                half macroLuma = dot(macro, half3(0.299, 0.587, 0.114));
-                albedo *= lerp(1.0h, 0.55h + macroLuma, _MacroContrast);
-
-                float3 normalWS = PerturbNormal(geometricNormalWS, input.positionWS, blend);
-
-                // Vertex colour carries the shading the generator baked in — ceilings
-                // darker than floors, mineral staining, wear on the props.
-                half3 vertexTint = lerp(half3(1, 1, 1), input.color.rgb, _VertexColorStrength);
-                albedo *= vertexTint;
-
-                // Alpha carries the curvature occlusion MeshBuilder baked per vertex:
-                // the metre-scale darkening where a wall meets a floor or a passage
-                // narrows, which screen-space occlusion is the wrong tool for.
                 half occlusion = lerp(1.0h, input.color.a, _OcclusionStrength);
 
-                // Everything below the historic high-water mark is stained and wet.
-                half damp = saturate((_DampHeight - input.positionWS.y) / max(_DampFalloff, 0.01));
-                albedo = lerp(albedo, albedo * _DampColor.rgb, damp);
+                float3 geometricNormalWS = normalize(input.normalWS);
+                float3 normalWS = PerturbNormal(geometricNormalWS, input.positionWS, sampled.rgb);
 
                 InputData inputData = (InputData)0;
                 inputData.positionWS = input.positionWS;
@@ -245,12 +191,11 @@ Shader "Grotto/CaveTriplanar"
                 SurfaceData surfaceData = (SurfaceData)0;
                 surfaceData.albedo = albedo;
                 surfaceData.metallic = _Metallic;
-                // Wet rock is shinier rock.
-                surfaceData.smoothness = lerp(_Smoothness, saturate(_Smoothness + 0.45), damp);
+                surfaceData.smoothness = _Smoothness;
                 surfaceData.normalTS = half3(0, 0, 1);
                 surfaceData.occlusion = occlusion;
                 surfaceData.alpha = 1.0h;
-                surfaceData.emission = half3(0, 0, 0);
+                surfaceData.emission = _EmissionColor.rgb;
                 surfaceData.specular = half3(0, 0, 0);
 
                 half4 color = UniversalFragmentPBR(inputData, surfaceData);
@@ -276,6 +221,7 @@ Shader "Grotto/CaveTriplanar"
             #pragma vertex ShadowPassVertex
             #pragma fragment ShadowPassFragment
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/Shaders/ShadowCasterPass.hlsl"
             ENDHLSL
@@ -294,6 +240,7 @@ Shader "Grotto/CaveTriplanar"
             #pragma target 3.0
             #pragma vertex DepthOnlyVertex
             #pragma fragment DepthOnlyFragment
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
@@ -311,6 +258,7 @@ Shader "Grotto/CaveTriplanar"
             #pragma target 3.0
             #pragma vertex DepthNormalsVertex
             #pragma fragment DepthNormalsFragment
+            #pragma multi_compile_instancing
 
             #include "Packages/com.unity.render-pipelines.universal/Shaders/LitDepthNormalsPass.hlsl"
             ENDHLSL

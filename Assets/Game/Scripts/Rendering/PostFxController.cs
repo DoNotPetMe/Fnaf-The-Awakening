@@ -51,6 +51,9 @@ namespace Grotto.Rendering
         private LensDistortion _distortion;
         private Bloom _bloom;
         private ColorAdjustments _colour;
+        private Tonemapping _tonemap;
+        private ShadowsMidtonesHighlights _grade;
+        private WhiteBalance _balance;
 
         private FacilityRuntime _facility;
         private float _scare;
@@ -114,11 +117,46 @@ namespace Grotto.Rendering
             _bloom.intensity.Override(baseBloom);
             _bloom.threshold.Override(0.85f);
             _bloom.scatter.Override(0.72f);
+            // A trace of dirt on the lens. Every light in this game is a bare bulb or
+            // a work lamp pointed at the camera at some point in the night, and a
+            // clean bloom around one of those reads as CG.
+            _bloom.dirtIntensity.Override(0f);
+
+            // ACES, not neutral. The pipeline renders in HDR because a 3.2-intensity
+            // cap lamp in a 0.05-ambient room is a 60:1 range, and something has to
+            // bring that down to a display. ACES has the filmic shoulder that keeps
+            // the rock under the lamp readable instead of clipping it to white, and
+            // its toe keeps the shadows from crushing to a flat black — which matters
+            // enormously in a game where most of the screen is shadow and the player
+            // is being asked to see something move in it.
+            _tonemap = _profile.Add<Tonemapping>(true);
+            _tonemap.mode.Override(TonemappingMode.ACES);
 
             _colour = _profile.Add<ColorAdjustments>(true);
-            _colour.postExposure.Override(0f);
-            _colour.contrast.Override(8f);
-            _colour.saturation.Override(-14f);
+            _colour.postExposure.Override(0.35f);   // ACES darkens; this puts it back
+            _colour.contrast.Override(6f);
+            _colour.saturation.Override(-10f);
+
+            // The grade. Shadows pushed cold and up off the floor, midtones left alone,
+            // highlights warmed — which is what a tungsten work lamp in a limestone
+            // cavern actually looks like, and it separates the lit from the unlit by
+            // hue as well as by value. The lift is the important one: it means a shape
+            // in an unlit corner is dark blue rather than absent.
+            _grade = _profile.Add<ShadowsMidtonesHighlights>(true);
+            _grade.shadows.Override(new Vector4(0.86f, 0.94f, 1.16f, 0.02f));
+            _grade.midtones.Override(new Vector4(1f, 1f, 1f, 0f));
+            _grade.highlights.Override(new Vector4(1.06f, 1f, 0.90f, 0f));
+            _grade.shadowsStart.Override(0f);
+            _grade.shadowsEnd.Override(0.32f);
+            _grade.highlightsStart.Override(0.58f);
+            _grade.highlightsEnd.Override(1f);
+
+            // 4200K: the standby circuit is old tungsten, so the untinted render is
+            // already too warm. Pulling the white point cooler makes the lamps read as
+            // warm *against* something rather than as the colour of the whole world.
+            _balance = _profile.Add<WhiteBalance>(true);
+            _balance.temperature.Override(-8f);
+            _balance.tint.Override(3f);
 
             _volume = gameObject.AddComponent<Volume>();
             _volume.isGlobal = true;
@@ -173,9 +211,25 @@ namespace Grotto.Rendering
 
             // Colour drains as the supply fails; bloom lifts so the few live lamps
             // smear the way a dark-adapted eye sees them.
-            _colour.saturation.value = -14f - BlackoutLevel * 40f - pressure * 22f;
-            _colour.postExposure.value = -BlackoutLevel * 0.5f + _scare * 0.35f;
+            _colour.saturation.value = -10f - BlackoutLevel * 40f - pressure * 22f;
+            _colour.postExposure.value = 0.35f - BlackoutLevel * 0.5f + _scare * 0.35f;
             _bloom.intensity.value = baseBloom + BlackoutLevel * 0.5f + _scare * 0.4f;
+
+            // In a blackout the grade goes further: shadows lift and go colder still,
+            // so the cave becomes a blue-grey wash you can just make out shapes in
+            // rather than a black screen. This is the difference between a tense
+            // blackout and an unplayable one.
+            float lift = 0.02f + BlackoutLevel * 0.05f;
+            _grade.shadows.value = new Vector4(
+                Mathf.Lerp(0.86f, 0.70f, BlackoutLevel),
+                Mathf.Lerp(0.94f, 0.86f, BlackoutLevel),
+                Mathf.Lerp(1.16f, 1.30f, BlackoutLevel),
+                lift);
+
+            // The whole image cools as the air goes. Physiologically wrong and
+            // dramatically right: hypoxia is the one state the player should be able
+            // to recognise from a screenshot.
+            _balance.temperature.value = -8f - pressure * 22f;
         }
 
         /// <summary>Re-reads the accessibility settings, after the options menu changes them.</summary>

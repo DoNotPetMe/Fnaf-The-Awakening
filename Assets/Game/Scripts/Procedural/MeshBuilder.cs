@@ -41,6 +41,9 @@ namespace Grotto.Procedural
         /// <summary>World-space units per UV tile. Keeps texel density consistent across sizes.</summary>
         public float UvScale { get; set; } = 1f;
 
+        /// <summary>Curvature-to-occlusion gain. See <see cref="BakeVertexOcclusion"/>.</summary>
+        private const float OcclusionGain = 1.2f;
+
         public void Clear()
         {
             _vertices.Clear();
@@ -326,6 +329,140 @@ namespace Grotto.Procedural
             for (int i = 0; i < other._triangles.Count; i++)
                 _triangles.Add(baseIndex + other._triangles[i]);
         }
+
+        // =====================================================================
+        // Ambient occlusion
+        // =====================================================================
+
+        /// <summary>
+        /// Bakes a per-vertex occlusion term into the vertex colour's alpha channel.
+        ///
+        /// A generated cave has no lightmap and no authored AO map, and screen-space
+        /// occlusion only darkens what is currently on screen at a radius of tens of
+        /// centimetres. Neither gives you the thing that actually makes rock read as
+        /// rock: the metre-scale gradient where a wall meets a floor, a chamber narrows
+        /// into a passage, or a fold turns back on itself.
+        ///
+        /// This is curvature-based occlusion, which is the cheap approximation of that.
+        /// For each vertex, look at every neighbour it shares an edge with and ask
+        /// which side of the vertex's tangent plane the neighbour is on. Neighbours
+        /// *in front of* the plane mean the surface curves toward the viewer — a
+        /// concavity, so light has fewer directions to arrive from. Neighbours behind
+        /// it mean a convexity, which is exposed. Average that, normalised by edge
+        /// length so a dense mesh and a coarse one agree, and you have a value that
+        /// tracks real occlusion closely enough for a dark game.
+        ///
+        /// The value accumulated is curvature in reciprocal metres — the dot product
+        /// divided by the edge length — not the dot product itself. That distinction is
+        /// the whole correctness of the thing: the dot product alone is an angle per
+        /// edge, so a twenty-metre chamber and a forty-centimetre crevice tessellated
+        /// with the same ring count come out identically occluded. Dividing by length
+        /// gives 1/radius, which is a property of the shape rather than of the mesh.
+        ///
+        /// It is O(triangles), needs no rays, and runs in a couple of milliseconds on
+        /// a whole cavern. The shader multiplies it into <c>surfaceData.occlusion</c>.
+        ///
+        /// <param name="strength">0 leaves everything unoccluded; 1 is the full range.</param>
+        /// <param name="floor">The darkest an occluded vertex may get.</param>
+        /// </summary>
+        public void BakeVertexOcclusion(float strength = 1f, float floor = 0.35f)
+        {
+            int count = _vertices.Count;
+            if (count == 0 || _triangles.Count == 0) return;
+
+            // Welding by position: the box and ring builders duplicate vertices at every
+            // seam so each face can carry its own normal, and un-welded neighbours would
+            // leave a bright line down every edge of the cave.
+            var weld = BuildWeldMap(count);
+
+            var curvature = new float[count];
+            var weight = new float[count];
+
+            for (int i = 0; i < _triangles.Count; i += 3)
+            {
+                Accumulate(_triangles[i], _triangles[i + 1], weld, curvature, weight);
+                Accumulate(_triangles[i + 1], _triangles[i + 2], weld, curvature, weight);
+                Accumulate(_triangles[i + 2], _triangles[i], weld, curvature, weight);
+            }
+
+            // Resolve on the welded representatives, then read back, so every vertex at
+            // a seam gets the same answer.
+            var resolved = new float[count];
+            for (int i = 0; i < count; i++)
+            {
+                int root = weld[i];
+                resolved[root] = weight[root] > 0f ? curvature[root] / weight[root] : 0f;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                // Positive curvature is concave, in reciprocal metres. At gain 1.2 a
+                // six-metre chamber sits at about 0.94 — felt rather than seen — a
+                // one-metre alcove at 0.6, and anything tighter than half a metre
+                // bottoms out, which is what a crevice should do.
+                float concavity = Mathf.Clamp01(resolved[weld[i]] * OcclusionGain);
+                float occlusion = Mathf.Lerp(1f, Mathf.Lerp(1f, floor, concavity), Mathf.Clamp01(strength));
+
+                var colour = _colors[i];
+                colour.a = occlusion;
+                _colors[i] = colour;
+            }
+        }
+
+        private void Accumulate(int a, int b, int[] weld, float[] curvature, float[] weight)
+        {
+            int ra = weld[a];
+            int rb = weld[b];
+            if (ra == rb) return;
+
+            var edge = _vertices[rb] - _vertices[ra];
+            float length = edge.magnitude;
+            if (length < 1e-5f) return;
+
+            edge /= length;
+
+            // dot > 0: the neighbour lies on the side the normal points to, so the
+            // surface folds inward here. The sum is of bare dot products against a sum
+            // of lengths, which makes the quotient a curvature in 1/metres rather than
+            // an angle per edge — see the note above about why that matters.
+            curvature[ra] += Vector3.Dot(edge, _normals[ra]);
+            weight[ra] += length;
+
+            curvature[rb] += Vector3.Dot(-edge, _normals[rb]);
+            weight[rb] += length;
+        }
+
+        /// <summary>
+        /// Maps each vertex to the lowest index sharing its position, on a 1mm grid.
+        ///
+        /// A hash of the quantised position rather than an O(n^2) search: a cave shell
+        /// is a quarter of a million vertices and the quadratic version takes minutes.
+        /// </summary>
+        private int[] BuildWeldMap(int count)
+        {
+            var weld = new int[count];
+            var seen = new Dictionary<long, int>(count);
+
+            for (int i = 0; i < count; i++)
+            {
+                var v = _vertices[i];
+
+                long key = Quantise(v.x);
+                key = key * 1_000_003L + Quantise(v.y);
+                key = key * 1_000_003L + Quantise(v.z);
+
+                if (seen.TryGetValue(key, out int root)) weld[i] = root;
+                else
+                {
+                    seen[key] = i;
+                    weld[i] = i;
+                }
+            }
+
+            return weld;
+        }
+
+        private static long Quantise(float value) => (long)Mathf.Round(value * 1000f);
 
         /// <summary>
         /// Bakes the mesh. Uses a 32-bit index buffer when the geometry needs it — cave

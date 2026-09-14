@@ -62,7 +62,12 @@ namespace Grotto.Procedural
                 // normals — fine for a pillar, wrong for a skull.
                 triangles += pair.Value.Flush(pair.Key, pair.Key.name, addColliders: false,
                     layer: SafeLayer("Animatronic"), recalculateNormals: true,
-                    staticGeometry: false);
+                    staticGeometry: false,
+                    // Lighter than the cave's: a character is mostly convex, so the
+                    // pass mainly darkens the joint creases, the eye sockets and the
+                    // gaps between the shell plates — which is exactly where you want
+                    // it, and full strength would soot up the whole model.
+                    occlusion: 0.65f);
 
             AttachEyes(rig, spec, scale);
             AttachCollider(root, spec, scale);

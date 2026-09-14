@@ -42,7 +42,8 @@ namespace Grotto.Procedural
         /// see immediately when a layout change has made a room expensive.
         /// </summary>
         public int Flush(Transform parent, string namePrefix, bool addColliders,
-            int layer = 0, bool recalculateNormals = false, bool staticGeometry = true)
+            int layer = 0, bool recalculateNormals = false, bool staticGeometry = true,
+            float occlusion = 1f)
         {
             int triangles = 0;
 
@@ -50,6 +51,12 @@ namespace Grotto.Procedural
             {
                 var builder = pair.Value;
                 if (builder.VertexCount == 0) continue;
+
+                // Vertex occlusion before baking. Water is excluded: it is a flat plane
+                // whose curvature is zero everywhere, so the pass would only cost time,
+                // and the shader reads its alpha channel for something else.
+                if (occlusion > 0f && pair.Key != SurfaceKind.Water)
+                    builder.BakeVertexOcclusion(occlusion);
 
                 var mesh = builder.ToMesh($"{namePrefix}_{pair.Key}", recalculateNormals);
                 triangles += mesh.triangles.Length / 3;
