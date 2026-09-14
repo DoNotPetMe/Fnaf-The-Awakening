@@ -2,37 +2,71 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using Grotto.Core;
+using Grotto.Facility;
 using Grotto.Player;
 
 namespace Grotto.UI
 {
     /// <summary>
-    /// Night select, pause and the post-night summary.
+    /// Every screen that is not the station itself: the title, the site picker, the
+    /// night select, settings, the cast dossiers, the pause menu and the post-night
+    /// summary.
     ///
-    /// One component for all three because they are the same screen with different
-    /// contents: a dimmed backdrop over a stopped game with a column of buttons. The
-    /// pause menu stops the clock through <see cref="Time.timeScale"/> but reads input
-    /// through unscaled time, so the game is genuinely frozen rather than merely slow.
+    /// One component for all of them because they are the same object — a canvas over
+    /// a stopped game, a heading, and a column of things to press. Splitting that into
+    /// seven MonoBehaviours would buy nothing and cost a shared screen stack, a shared
+    /// palette and a single place to ask "is a menu open".
+    ///
+    /// Screens are rebuilt from scratch on every transition rather than shown and
+    /// hidden. Menus here are small, they are never on screen during play, and a
+    /// rebuilt screen cannot show a stale unlock count or a setting the player changed
+    /// on another screen — which is the bug that hiding-and-showing always eventually
+    /// produces.
+    ///
+    /// The pause menu stops the clock with <see cref="Time.timeScale"/> but reads
+    /// input in unscaled time, so the game is genuinely frozen rather than merely slow.
     /// </summary>
     [DefaultExecutionOrder(-200)]
     [DisallowMultipleComponent]
-    public sealed class MenuController : MonoBehaviour
+    public sealed partial class MenuController : MonoBehaviour
     {
-        private enum Screen { None, NightSelect, Paused, Summary }
+        private enum Screen
+        {
+            None,
+            Title,
+            Sites,
+            NightSelect,
+            Settings,
+            Cast,
+            Paused,
+            Summary
+        }
 
         private Canvas _canvas;
         private CanvasGroup _group;
-        private RectTransform _content;
-        private Text _title;
-        private Text _subtitle;
-        private readonly List<GameObject> _buttons = new List<GameObject>(8);
+        private RectTransform _root;
+        private GameObject _screenRoot;
 
         private NightController _night;
         private StationController _station;
         private SaveSystem _save;
+        private TitleStage _stage;
+
         private Screen _screen = Screen.None;
+        private readonly Stack<Screen> _back = new Stack<Screen>(4);
 
         public bool IsOpen => _screen != Screen.None;
+
+        /// <summary>True on the screens that are the front end rather than a pause overlay.</summary>
+        public bool IsFrontEnd =>
+            _screen == Screen.Title || _screen == Screen.Sites ||
+            _screen == Screen.NightSelect || _screen == Screen.Settings || _screen == Screen.Cast;
+
+        private SettingsData Settings => _save != null ? _save.Data.settings : new SettingsData();
+
+        // ---------------------------------------------------------------------
+        // Lifecycle
+        // ---------------------------------------------------------------------
 
         private void Start()
         {
@@ -40,13 +74,21 @@ namespace Grotto.UI
             ServiceLocator.TryGet(out _station);
             ServiceLocator.TryGet(out _save);
 
-            Build();
+            _stage = GetComponent<TitleStage>();
+            if (_stage == null) _stage = gameObject.AddComponent<TitleStage>();
+
+            BuildCanvas();
 
             EventBus.Subscribe<NightEndedSignal>(OnNightEnded);
             EventBus.Subscribe<NightStartedSignal>(OnNightStarted);
 
             ServiceLocator.Register(this);
-            Close();
+
+            // A cold boot with no night requested lands on the title screen. A scene
+            // that started a night — the front end's request, or a pinned development
+            // night — goes straight to the station.
+            if (_night == null || _night.CurrentPhase == NightController.Phase.Idle) OpenTitle();
+            else Close();
         }
 
         private void OnDestroy()
@@ -56,95 +98,170 @@ namespace Grotto.UI
             ServiceLocator.Unregister(this);
         }
 
-        private void Build()
+        private void BuildCanvas()
         {
             _canvas = UIFactory.CreateCanvas("Menus", 300, transform);
             _group = _canvas.gameObject.AddComponent<CanvasGroup>();
 
-            var backdrop = UIFactory.Panel(_canvas.transform, "Backdrop", new Color(0.01f, 0.012f, 0.015f, 0.93f));
-            UIFactory.Stretch(backdrop.rectTransform);
-            backdrop.raycastTarget = true;
-
-            _content = UIFactory.Group(_canvas.transform, "Content");
-            UIFactory.Anchor(_content, UIFactory.Centre, Vector2.zero, new Vector2(820f, 720f));
-
-            _title = UIFactory.Label(_content, "Title", "", 64, TextAnchor.UpperCenter);
-            UIFactory.Anchor(_title.rectTransform, UIFactory.TopCentre, new Vector2(0f, 0f), new Vector2(820f, 80f));
-
-            _subtitle = UIFactory.Label(_content, "Subtitle", "", 22, TextAnchor.UpperCenter, UIFactory.InkDim);
-            UIFactory.Anchor(_subtitle.rectTransform, UIFactory.TopCentre, new Vector2(0f, -88f), new Vector2(820f, 120f));
+            _root = UIFactory.Group(_canvas.transform, "Screen");
         }
 
         private void Update()
         {
             if (_station?.Input == null) return;
 
-            if (_station.Input.Pause.WasPressedThisFrame())
+            if (!_station.Input.Pause.WasPressedThisFrame()) return;
+
+            // Escape backs out of a front-end screen, and pauses or resumes in play.
+            if (IsFrontEnd)
             {
-                if (_screen == Screen.Paused) Close();
-                else if (_screen == Screen.None) OpenPause();
+                if (_back.Count > 0) Back();
+                return;
             }
+
+            if (_screen == Screen.Paused) Close();
+            else if (_screen == Screen.None) OpenPause();
         }
 
         // ---------------------------------------------------------------------
-        // Screens
+        // Screen plumbing
         // ---------------------------------------------------------------------
 
-        public void OpenNightSelect()
+        /// <summary>Tears down the current screen and starts a fresh one.</summary>
+        private RectTransform BeginScreen(Screen screen)
         {
-            ClearButtons();
-            _screen = Screen.NightSelect;
+            if (_screenRoot != null) Destroy(_screenRoot);
 
-            _title.text = "THE AWAKENING";
-            _title.color = UIFactory.Ink;
-            _subtitle.text =
-                "GROTTO SPRINGS FAMILY FUN CAVERNS — MARROW HOLLOW\n" +
-                "Reclamation site monitor, 11 PM to 6 AM.";
+            _screen = screen;
+            _screenRoot = new GameObject(screen.ToString(), typeof(RectTransform));
+            _screenRoot.transform.SetParent(_root, worldPositionStays: false);
+            _screenRoot.layer = _root.gameObject.layer;
 
-            int unlocked = _save?.Data.highestNightUnlocked ?? 1;
-            float y = -230f;
+            return UIFactory.Stretch((RectTransform)_screenRoot.transform);
+        }
 
-            for (int night = 1; night <= Mathf.Min(6, unlocked); night++)
+        /// <summary>Remembers where we came from, then builds the screen we are going to.</summary>
+        private void Navigate(System.Action build)
+        {
+            _back.Push(_screen);
+            build();
+        }
+
+        /// <summary>
+        /// Returns to whatever pushed the current screen. The stack is a trail rather
+        /// than a history, so going back pops without pushing.
+        /// </summary>
+        private void Back()
+        {
+            var previous = _back.Count > 0 ? _back.Pop() : Screen.Title;
+
+            switch (previous)
             {
-                int captured = night;
-                AddButton($"NIGHT {night}", ref y, () => { Close(); _night?.StartNight(captured); });
+                case Screen.Sites: BuildSitesScreen(); break;
+                case Screen.NightSelect: BuildNightSelectScreen(); break;
+                case Screen.Settings: BuildSettingsScreen(); break;
+                case Screen.Cast: BuildCastScreen(); break;
+
+                // Settings opened from the pause menu goes back to the pause menu, not
+                // out to the title screen and a scene the player has not left.
+                case Screen.Paused: OpenPause(); break;
+
+                default: BuildTitleScreen(); break;
+            }
+        }
+
+        private void Show(bool frontEnd)
+        {
+            _group.alpha = 1f;
+            _group.blocksRaycasts = true;
+            _group.interactable = true;
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
+            if (_station != null) _station.SetControlSuspended(true);
+
+            if (_stage != null) _stage.SetActive(frontEnd);
+        }
+
+        public void Close()
+        {
+            _screen = Screen.None;
+            _back.Clear();
+
+            if (_screenRoot != null)
+            {
+                Destroy(_screenRoot);
+                _screenRoot = null;
             }
 
-            if (_save != null && _save.Data.customNightUnlocked)
-                AddButton("CUSTOM NIGHT", ref y, () => { Close(); _night?.StartNight(7); });
+            _group.alpha = 0f;
+            _group.blocksRaycasts = false;
+            _group.interactable = false;
 
-            AddButton("QUIT", ref y, Quit);
+            Time.timeScale = 1f;
 
-            Show();
+            if (_station != null) _station.SetControlSuspended(false);
+            if (_stage != null) _stage.SetActive(false);
+
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+
+        // ---------------------------------------------------------------------
+        // Entry points
+        // ---------------------------------------------------------------------
+
+        public void OpenTitle()
+        {
+            _back.Clear();
+            BuildTitleScreen();
+        }
+
+        /// <summary>
+        /// Kept for the dev console and for anything that wants the old behaviour of
+        /// jumping straight to the list of nights.
+        /// </summary>
+        public void OpenNightSelect()
+        {
+            _back.Clear();
+            _back.Push(Screen.Title);
+            BuildNightSelectScreen();
         }
 
         public void OpenPause()
         {
-            ClearButtons();
-            _screen = Screen.Paused;
+            var screen = BeginScreen(Screen.Paused);
+            Scrim(screen, 0.93f);
 
-            _title.text = "PAUSED";
-            _title.color = UIFactory.Ink;
-            _subtitle.text = _night != null && _night.CurrentDefinition != null
-                ? $"{_night.CurrentDefinition.displayName} — {_night.Clock.DisplayHour}"
+            string subtitle = _night != null && _night.CurrentDefinition != null
+                ? $"{_night.CurrentDefinition.displayName.ToUpperInvariant()}  ·  {_night.Clock.DisplayHour}"
                 : "";
 
-            float y = -230f;
-            AddButton("RESUME", ref y, Close);
-            AddButton("RESTART NIGHT", ref y, () =>
+            Heading(screen, "PAUSED", subtitle);
+
+            var column = Column(screen, new Vector2(0f, -300f), UIFactory.TopCentre);
+
+            AddButton(column, "RESUME", Close);
+
+            AddButton(column, "RESTART NIGHT", () =>
             {
                 int night = _night != null ? _night.CurrentNight : 1;
                 Close();
                 _night?.StartNight(night);
             });
-            AddButton("ABANDON NIGHT", ref y, () =>
+
+            AddButton(column, "SETTINGS", () => Navigate(BuildSettingsScreen));
+
+            AddButton(column, "ABANDON NIGHT", () =>
             {
                 Close();
                 _night?.RequestOutcome(NightOutcome.Aborted);
             });
-            AddButton("QUIT", ref y, Quit);
 
-            Show();
+            AddButton(column, "QUIT TO TITLE", SessionRequest.ReturnToTitle);
+
+            Show(frontEnd: false);
             Time.timeScale = 0f;
         }
 
@@ -160,32 +277,56 @@ namespace Grotto.UI
         {
             yield return new WaitForSecondsRealtime(delay);
 
-            ClearButtons();
-            _screen = Screen.Summary;
+            var screen = BeginScreen(Screen.Summary);
+            Scrim(screen, 0.95f);
 
             bool survived = signal.Outcome == NightOutcome.Survived;
+            var layout = FacilityRuntime.Instance != null ? FacilityRuntime.Instance.Layout : null;
 
-            _title.text = survived ? "6 AM" : "SHIFT ENDED";
-            _title.color = survived ? UIFactory.Ink : UIFactory.InkAlarm;
-            _subtitle.text = Describe(signal);
+            Heading(screen,
+                survived ? "6 AM" : "SHIFT ENDED",
+                layout != null ? layout.siteName.ToUpperInvariant() : "",
+                survived ? UIFactory.Ink : UIFactory.InkAlarm);
 
-            float y = -260f;
+            var body = UIFactory.Label(screen, "Body", Describe(signal), 21,
+                TextAnchor.UpperCenter, UIFactory.InkDim, wrap: true);
+            UIFactory.Anchor(body.rectTransform, UIFactory.TopCentre,
+                new Vector2(0f, -220f), new Vector2(900f, 180f));
+
+            var column = Column(screen, new Vector2(0f, -420f), UIFactory.TopCentre);
 
             if (survived)
             {
                 int next = signal.Night + 1;
                 if (next <= 6)
-                    AddButton($"NIGHT {next}", ref y, () => { Close(); _night?.StartNight(next); });
+                {
+                    AddButton(column, $"NIGHT {next}", () =>
+                    {
+                        Close();
+                        _night?.StartNight(next);
+                    });
+                }
             }
             else
             {
-                AddButton("TRY AGAIN", ref y, () => { Close(); _night?.StartNight(signal.Night); });
+                AddButton(column, "TRY AGAIN", () =>
+                {
+                    Close();
+                    _night?.StartNight(signal.Night);
+                });
             }
 
-            AddButton("NIGHT SELECT", ref y, OpenNightSelect);
-            AddButton("QUIT", ref y, Quit);
+            AddButton(column, "CHANGE NIGHT", () =>
+            {
+                _back.Clear();
+                _back.Push(Screen.Title);
+                BuildNightSelectScreen();
+            });
 
-            Show();
+            AddButton(column, "TITLE SCREEN", SessionRequest.ReturnToTitle);
+            AddButton(column, "QUIT", Quit);
+
+            Show(frontEnd: false);
         }
 
         private string Describe(NightEndedSignal signal)
@@ -194,65 +335,20 @@ namespace Grotto.UI
             {
                 NightOutcome.Survived => "You made it to six. The survey crew arrives at eight.",
                 NightOutcome.Killed => "Something reached the control room.",
-                NightOutcome.Flooded => "The spring won. The pump was never going to hold it alone.",
+                NightOutcome.Flooded => "The water won. The pump was never going to hold it alone.",
                 NightOutcome.Suffocated => "The air went, and then so did you.",
                 _ => "Shift abandoned."
             };
 
             var record = _save?.Data.GetOrCreateRecord(signal.Night);
-            string stats = record == null ? "" :
-                $"\n\nAttempts: {record.attempts}    Deaths: {record.deaths}" +
-                $"\nBest: {Mathf.FloorToInt(record.bestSurvivalSeconds / 60f)}m {Mathf.FloorToInt(record.bestSurvivalSeconds % 60f)}s of night time";
+            if (record == null) return reason;
 
-            return reason + stats;
-        }
+            int minutes = Mathf.FloorToInt(record.bestSurvivalSeconds / 60f);
+            int seconds = Mathf.FloorToInt(record.bestSurvivalSeconds % 60f);
 
-        // ---------------------------------------------------------------------
-
-        private void AddButton(string label, ref float y, System.Action onClick)
-        {
-            var button = UIFactory.TextButton(_content, "Btn_" + label, label,
-                new Vector2(460f, 62f), onClick, 28);
-
-            UIFactory.Anchor((RectTransform)button.transform, UIFactory.TopCentre,
-                new Vector2(0f, y), new Vector2(460f, 62f));
-
-            y -= 74f;
-            _buttons.Add(button.gameObject);
-        }
-
-        private void ClearButtons()
-        {
-            for (int i = 0; i < _buttons.Count; i++)
-                if (_buttons[i] != null) Destroy(_buttons[i]);
-            _buttons.Clear();
-        }
-
-        private void Show()
-        {
-            _group.alpha = 1f;
-            _group.blocksRaycasts = true;
-            _group.interactable = true;
-
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-
-            if (_station != null) _station.enabled = false;
-        }
-
-        public void Close()
-        {
-            _screen = Screen.None;
-            _group.alpha = 0f;
-            _group.blocksRaycasts = false;
-            _group.interactable = false;
-
-            Time.timeScale = 1f;
-
-            if (_station != null) _station.enabled = true;
-
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            return reason +
+                   $"\n\nAttempts {record.attempts}     Deaths {record.deaths}     " +
+                   $"Best {minutes}m {seconds:00}s of night time";
         }
 
         private static void Quit()

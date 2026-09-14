@@ -72,7 +72,10 @@ namespace Grotto.Editor
             var config = GetOrCreate<GameConfig>($"{ResourcesPath}/GameConfig.asset");
             config.nights = nights;
             config.customNightTemplate = nights.Length > 6 ? nights[6] : null;
-            config.editorAutoStartNight = 1;
+            // 0, so a cold boot lands on the title screen rather than dropping the
+            // player into a night they did not choose. Set it in the inspector, or set
+            // NightController.overrideStartNight, to skip the front end while working.
+            config.editorAutoStartNight = 0;
             config.targetFrameRate = 60;
             EditorUtility.SetDirty(config);
 

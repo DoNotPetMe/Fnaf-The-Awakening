@@ -208,6 +208,7 @@ namespace Grotto.Editor
             root.AddComponent<StationHud>();
             root.AddComponent<OverlayController>();
             root.AddComponent<MenuController>();
+            root.AddComponent<TitleStage>();
 
             // uGUI needs an event system for the camera buttons and the menus.
             var events = new GameObject("EventSystem");

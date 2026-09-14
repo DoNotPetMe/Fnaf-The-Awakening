@@ -209,6 +209,217 @@ namespace Grotto.UI
             return fill;
         }
 
+        /// <summary>
+        /// A framed panel with a title strip. The unit the front-end screens are built
+        /// from — a site card, a character dossier, a settings block are all this.
+        /// </summary>
+        public static RectTransform Card(Transform parent, string cardName, string heading,
+            Vector2 size, out Text headingLabel, Color? accent = null)
+        {
+            var background = Panel(parent, cardName, new Color(0.045f, 0.048f, 0.055f, 0.94f));
+            background.rectTransform.sizeDelta = size;
+            background.raycastTarget = true;
+
+            var outline = background.gameObject.AddComponent<Outline>();
+            outline.effectColor = accent ?? PanelEdge;
+            outline.effectDistance = new Vector2(2f, -2f);
+
+            // A colour strip down the left edge. Cheap, and it does more to make a list
+            // of cards readable than any amount of typography.
+            var strip = Panel(background.transform, "Accent", accent ?? InkDim);
+            Anchor(strip.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0f), new Vector2(4f, size.y));
+
+            headingLabel = Label(background.transform, "Heading", heading, 26, TextAnchor.UpperLeft,
+                accent ?? Ink);
+            Anchor(headingLabel.rectTransform, TopLeft, new Vector2(20f, -14f), new Vector2(size.x - 40f, 32f));
+
+            return background.rectTransform;
+        }
+
+        /// <summary>A thin horizontal rule. Used to break a column of controls into blocks.</summary>
+        public static Image Rule(Transform parent, string ruleName, float width, Color? color = null)
+        {
+            var rule = Panel(parent, ruleName, color ?? new Color(0.22f, 0.20f, 0.17f, 1f));
+            rule.rectTransform.sizeDelta = new Vector2(width, 1.5f);
+            return rule;
+        }
+
+        /// <summary>
+        /// A labelled value slider.
+        ///
+        /// Built from a Slider rather than a filled Image because unlike the station
+        /// gauges this one *is* interactive. The caller gets the slider back and hooks
+        /// onValueChanged itself; the value readout updates on its own.
+        /// </summary>
+        public static Slider ValueSlider(Transform parent, string sliderName, string caption,
+            Vector2 size, float value, float min, float max, System.Action<float> onChanged,
+            System.Func<float, string> format = null)
+        {
+            var row = Group(parent, sliderName);
+            row.sizeDelta = size;
+
+            var label = Label(row, "Caption", caption, 20, TextAnchor.MiddleLeft, InkDim);
+            Anchor(label.rectTransform, TopLeft, new Vector2(0f, 0f), new Vector2(size.x * 0.45f, size.y));
+
+            var readout = Label(row, "Value", "", 20, TextAnchor.MiddleRight, Ink);
+            Anchor(readout.rectTransform, TopRight, new Vector2(0f, 0f), new Vector2(size.x * 0.16f, size.y));
+
+            float trackWidth = size.x * 0.34f;
+
+            var track = Panel(row, "Track", new Color(0f, 0f, 0f, 0.6f));
+            Anchor(track.rectTransform, TopLeft, new Vector2(size.x * 0.46f, -size.y * 0.5f + 4f),
+                new Vector2(trackWidth, 8f));
+            track.rectTransform.pivot = new Vector2(0f, 0.5f);
+            track.raycastTarget = true;
+
+            var fill = Panel(track.transform, "Fill", Ink);
+            var fillRect = Stretch(fill.rectTransform);
+            fillRect.pivot = new Vector2(0f, 0.5f);
+            fill.sprite = BuiltinSprite;
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+
+            var handle = Panel(track.transform, "Handle", Ink);
+            handle.rectTransform.sizeDelta = new Vector2(10f, 22f);
+
+            var slider = track.gameObject.AddComponent<Slider>();
+            slider.transition = Selectable.Transition.None;
+            slider.fillRect = fillRect;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.minValue = min;
+            slider.maxValue = max;
+            slider.wholeNumbers = false;
+            slider.SetValueWithoutNotify(Mathf.Clamp(value, min, max));
+
+            format ??= v => $"{Mathf.RoundToInt(Mathf.InverseLerp(min, max, v) * 100f)}%";
+            readout.text = format(slider.value);
+
+            slider.onValueChanged.AddListener(v =>
+            {
+                readout.text = format(v);
+                onChanged?.Invoke(v);
+            });
+
+            return slider;
+        }
+
+        /// <summary>
+        /// An on/off row. A button rather than a Toggle: a Toggle needs a checkmark
+        /// graphic and gives nothing back for it, and the whole row being clickable is
+        /// a better target than a 20px box.
+        /// </summary>
+        public static Button ToggleRow(Transform parent, string toggleName, string caption,
+            Vector2 size, bool value, System.Action<bool> onChanged, string note = "")
+        {
+            bool state = value;
+
+            var background = Panel(parent, toggleName, new Color(0f, 0f, 0f, 0.35f));
+            background.rectTransform.sizeDelta = size;
+            background.raycastTarget = true;
+
+            var label = Label(background.transform, "Caption", caption, 20, TextAnchor.MiddleLeft, InkDim);
+            Anchor(label.rectTransform, TopLeft, new Vector2(12f, 0f), new Vector2(size.x * 0.62f, size.y));
+
+            var readout = Label(background.transform, "State", "", 20, TextAnchor.MiddleRight);
+            Anchor(readout.rectTransform, TopRight, new Vector2(-12f, 0f), new Vector2(size.x * 0.3f, size.y));
+
+            void Paint()
+            {
+                readout.text = state ? "ON" : "OFF";
+                readout.color = state ? Ink : new Color(0.42f, 0.40f, 0.38f);
+            }
+            Paint();
+
+            if (!string.IsNullOrEmpty(note))
+            {
+                var hint = Label(background.transform, "Note", note, 15, TextAnchor.LowerLeft,
+                    new Color(0.45f, 0.42f, 0.38f));
+                Anchor(hint.rectTransform, BottomLeft, new Vector2(12f, 4f), new Vector2(size.x - 24f, 18f));
+            }
+
+            var button = background.gameObject.AddComponent<Button>();
+            button.targetGraphic = background;
+            button.onClick.AddListener(() =>
+            {
+                state = !state;
+                Paint();
+                onChanged?.Invoke(state);
+            });
+
+            return button;
+        }
+
+        /// <summary>
+        /// A labelled left/right chooser for a small set of options. Used for quality
+        /// and frame-rate, where a slider would imply a continuum that is not there.
+        /// </summary>
+        public static void OptionRow(Transform parent, string optionName, string caption,
+            Vector2 size, string[] options, int index, System.Action<int> onChanged)
+        {
+            int current = Mathf.Clamp(index, 0, Mathf.Max(0, options.Length - 1));
+
+            var background = Panel(parent, optionName, new Color(0f, 0f, 0f, 0.35f));
+            background.rectTransform.sizeDelta = size;
+
+            var label = Label(background.transform, "Caption", caption, 20, TextAnchor.MiddleLeft, InkDim);
+            Anchor(label.rectTransform, TopLeft, new Vector2(12f, 0f), new Vector2(size.x * 0.5f, size.y));
+
+            var readout = Label(background.transform, "Value", "", 20, TextAnchor.MiddleCenter);
+            Anchor(readout.rectTransform, TopRight, new Vector2(-54f, 0f), new Vector2(size.x * 0.34f, size.y));
+
+            void Paint() => readout.text = options.Length > 0 ? options[current] : "-";
+            Paint();
+
+            void Step(int delta)
+            {
+                if (options.Length == 0) return;
+                current = (current + delta + options.Length) % options.Length;
+                Paint();
+                onChanged?.Invoke(current);
+            }
+
+            var left = TextButton(background.transform, "Prev", "<", new Vector2(34f, size.y - 12f),
+                () => Step(-1), 22);
+            Anchor((RectTransform)left.transform, TopRight, new Vector2(-96f, -6f), new Vector2(34f, size.y - 12f));
+
+            var right = TextButton(background.transform, "Next", ">", new Vector2(34f, size.y - 12f),
+                () => Step(1), 22);
+            Anchor((RectTransform)right.transform, TopRight, new Vector2(-12f, -6f), new Vector2(34f, size.y - 12f));
+        }
+
+        /// <summary>
+        /// A small labelled bar, for comparing one site's water/air/fuel pressure
+        /// against another's at a glance.
+        /// </summary>
+        public static void StatBar(Transform parent, string barName, string caption,
+            float value01, Vector2 size, Color color, string readout = "")
+        {
+            var row = Group(parent, barName);
+            row.sizeDelta = size;
+
+            var label = Label(row, "Caption", caption, 15, TextAnchor.MiddleLeft, InkDim);
+            Anchor(label.rectTransform, TopLeft, Vector2.zero, new Vector2(size.x * 0.34f, size.y));
+
+            var track = Panel(row, "Track", new Color(0f, 0f, 0f, 0.55f));
+            Anchor(track.rectTransform, TopLeft, new Vector2(size.x * 0.36f, -size.y * 0.5f + 3f),
+                new Vector2(size.x * 0.44f, 6f));
+            track.rectTransform.pivot = new Vector2(0f, 0.5f);
+
+            var fill = Panel(track.transform, "Fill", color);
+            var fillRect = Stretch(fill.rectTransform);
+            fillRect.pivot = new Vector2(0f, 0.5f);
+            fill.sprite = BuiltinSprite;
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+            fill.fillAmount = Mathf.Clamp01(value01);
+
+            if (string.IsNullOrEmpty(readout)) return;
+
+            var value = Label(row, "Value", readout, 15, TextAnchor.MiddleRight, color);
+            Anchor(value.rectTransform, TopRight, Vector2.zero, new Vector2(size.x * 0.16f, size.y));
+        }
+
         private static Sprite _builtinSprite;
 
         /// <summary>Unity's built-in white UI sprite. Needed by filled images.</summary>

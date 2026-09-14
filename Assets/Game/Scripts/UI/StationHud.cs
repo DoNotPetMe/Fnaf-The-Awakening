@@ -34,6 +34,8 @@ namespace Grotto.UI
         private Canvas _canvas;
         private RectTransform _roomGroup;
         private RectTransform _monitorGroup;
+        private CanvasGroup _canvasGroup;
+        private MenuController _menu;
         private CanvasGroup _monitorCanvasGroup;
         private MonitorScreen _monitor;
 
@@ -95,6 +97,11 @@ namespace Grotto.UI
         private void Build()
         {
             _canvas = UIFactory.CreateCanvas("Station HUD", 100, transform);
+
+            // The whole panel fades out behind the front-end screens. Without this the
+            // fuel gauge and the clock sit on top of the title card, which reads as a
+            // bug even though every number on them is correct.
+            _canvasGroup = _canvas.gameObject.AddComponent<CanvasGroup>();
 
             _roomGroup = UIFactory.Group(_canvas.transform, "Room");
             _monitorGroup = UIFactory.Group(_canvas.transform, "Monitor");
@@ -316,7 +323,18 @@ namespace Grotto.UI
         {
             if (_facility == null) return;
 
-            float dt = Time.deltaTime;
+            float dt = Time.unscaledDeltaTime;
+
+            // Unscaled, and the fade runs even when paused: a HUD that freezes
+            // half-transparent behind a menu looks broken.
+            if (_menu == null) ServiceLocator.TryGet(out _menu);
+            float targetAlpha = _menu != null && _menu.IsFrontEnd ? 0f : 1f;
+            _canvasGroup.alpha = MathUtil.ExpDecay(_canvasGroup.alpha, targetAlpha, 12f, dt);
+            _canvasGroup.blocksRaycasts = targetAlpha > 0.5f;
+
+            if (targetAlpha <= 0f && _canvasGroup.alpha < 0.01f) return;
+
+            dt = Time.deltaTime;
 
             UpdateBriefing();
             UpdateClock();

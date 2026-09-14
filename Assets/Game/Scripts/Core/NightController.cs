@@ -86,12 +86,24 @@ namespace Grotto.Core
 
         private void Start()
         {
+            if (CurrentPhase != Phase.Idle) return;
+
+            // The front end's request wins: it was made a scene reload ago precisely so
+            // the facility could be rebuilt for the site it names.
+            if (SessionRequest.HasNight)
+            {
+                int requested = SessionRequest.ConsumeNight(out int? seed);
+                StartNight(requested, seed);
+                return;
+            }
+
+            // Otherwise this is a cold boot. The menu opens on the title screen unless
+            // a night has been pinned for development.
             int autoStart = overrideStartNight > 0
                 ? overrideStartNight
                 : (config != null ? config.editorAutoStartNight : 0);
 
-            if (autoStart > 0 && CurrentPhase == Phase.Idle)
-                StartNight(autoStart);
+            if (autoStart > 0) StartNight(autoStart);
         }
 
         private void Update()
@@ -132,6 +144,7 @@ namespace Grotto.Core
             Clock.SecondsPerHour = CurrentDefinition.secondsPerHour;
             Clock.Reset();
 
+            // Filed against SaveData.selectedSiteId, which the facility keeps honest.
             Save?.RecordNightAttempt(CurrentNight);
 
             GLog.Info(LogChannel.Core, $"Starting {CurrentDefinition.displayName} (seed {seed}).");

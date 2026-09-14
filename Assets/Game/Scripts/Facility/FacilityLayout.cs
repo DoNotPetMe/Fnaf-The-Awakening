@@ -217,7 +217,14 @@ namespace Grotto.Facility
             SaveData save = null;
             if (ServiceLocator.TryGet(out SaveSystem saves)) save = saves.Data;
 
-            return SiteCatalog.Load(SiteCatalog.SelectedSiteId(save));
+            string resolved = SiteCatalog.SelectedSiteId(save);
+
+            // Write the resolved id back, so a profile naming a locked or unknown site
+            // does not go on filing its night records under a site it is not playing.
+            if (save != null && !string.Equals(save.selectedSiteId, resolved, StringComparison.OrdinalIgnoreCase))
+                save.selectedSiteId = resolved;
+
+            return SiteCatalog.Load(resolved);
         }
 
         /// <summary>Loads one named site, ignoring what the profile has selected.</summary>

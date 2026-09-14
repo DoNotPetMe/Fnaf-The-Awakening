@@ -174,8 +174,22 @@ namespace Grotto.Player
             }
         }
 
+        /// <summary>
+        /// While true the player's hands and head are the menu's, not theirs.
+        ///
+        /// This exists rather than simply disabling the component because disabling it
+        /// runs OnDisable, which tears down the input map — and the input map is what
+        /// the menu reads Escape from. A paused game that cannot be unpaused with the
+        /// key that paused it is a bad enough bug to be worth one bool.
+        /// </summary>
+        public bool ControlSuspended { get; private set; }
+
+        public void SetControlSuspended(bool suspended) => ControlSuspended = suspended;
+
         private void Update()
         {
+            if (ControlSuspended) return;
+
             float dt = Time.deltaTime;
 
             TickLook(dt);
