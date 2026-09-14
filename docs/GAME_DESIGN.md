@@ -130,6 +130,81 @@ out of bad air wearing her head degrades your instruments and cannot kill you.
 
 ---
 
+## The survey — a reason to look
+
+Every system above makes the monitor a **cost**. It draws power. It makes noise. It
+parks your head so you cannot see the doors. A player who works that out and plays
+optimally ends up staring at a blank wall with the monitor down, which is correct play
+and the least interesting version of the game. A surveillance horror game in which the
+correct move is not to use the surveillance has a hole in the middle of it.
+
+So the reclamation survey wants condition readings, and the office releases your fuel
+allowance in stages as you file them. Hold a camera on the room it asks for for four
+and a half seconds and fourteen litres appear in the day tank.
+
+Three choices make it work:
+
+- **The target is never one of your four approaches.** Filing always means several
+  seconds looking somewhere that cannot hurt you, while something you cannot see closes
+  on somewhere that can. A reading you could file while already watching the north door
+  would not be a decision.
+- **Progress decays rather than resets** when you glance away. Resetting would punish
+  exactly the door-checking the rest of the game spends five nights teaching.
+- **A snowy feed files more slowly**, which quietly makes camera maintenance worth doing
+  rather than something you only notice when a feed dies completely.
+
+Targets rotate on the hour whether or not you filed the last one, so a missed reading is
+a missed payment rather than a checklist you fail. The survey is optional pressure.
+
+## Night events — the shape of a night
+
+Without them a night is a monotone: five systems drifting at fixed rates for six hours,
+with the only variation coming from where the cast happens to be. A player settles into
+a loop within about ninety seconds and executes it until dawn. That is a system, not a
+night.
+
+An event breaks the loop by making one resource briefly, sharply wrong:
+
+| Event | What it does | For |
+|---|---|---|
+| **Inflow surge** | Water rises 2.4× as fast | 55–80s |
+| **Brownout** | The set's available rating drops to 62% | 38–55s |
+| **Duct fault** | Air decays 2.2× as fast | 45–70s |
+| **Multiplexer fault** | Every camera degrades 3.5× as fast | 50–75s |
+| **Tremor** | A real noise burst from the deep gallery | an instant |
+
+A brownout cuts the **rating**, not by adding phantom load. The player sees the same
+kilowatts on the board and the headroom shrink underneath them, which is what a
+labouring genset actually does and is far more legible than a load appearing from
+nowhere.
+
+Each is announced six seconds before it lands, because **an unannounced event is a tax
+and an announced one is a decision**. Six seconds is enough to shut a door, drop the
+fan or pour a can, and not enough to do all three.
+
+Scheduling is deterministic from the night's seed, one per hour from the second onward,
+scaled by the night number — so night one gets two disturbances and night six gets five,
+and a seeded replay runs the same night.
+
+## Difficulty — a separate axis from the campaign
+
+Three presets, none of which touch the AI:
+
+| Preset | Water | Air | Fuel | Events |
+|---|---|---|---|---|
+| **Survey** | ×0.70 | ×0.70 | ×0.75 | ×0.50 |
+| **Standard** | ×1.00 | ×1.00 | ×1.00 | ×1.00 |
+| **Reclamation** | ×1.35 | ×1.30 | ×1.25 | ×1.40 |
+
+The night number decides who is awake and how aggressive they are. This decides how
+much slack the *resources* give you, which is the part players most often want to adjust
+without also giving up the campaign's pacing. Keeping them separate means a player can
+see night five's cast on a night five's fuel budget they can actually survive.
+
+The three multipliers — night, site and preset — are deliberately kept separate in
+`FacilityRuntime` rather than folded into one number, because collapsing them makes any
+one of them impossible to tune without disturbing the other two.
+
 ## Pacing
 
 `AIDirector` holds the whole cast back for the first 12% of a night at half pressure,
@@ -156,15 +231,25 @@ unfair because it *is* unfair. After 80%, the suppression lifts. Six AM should b
 Nights 3 onward add hourly AI-level ramps, so the second half of a night is not the
 first half again.
 
+The same six nights run at any of the three sites, and the site's own multipliers stack
+on top — so night three at Hollowmere is night three's cast against 1.55× water, and
+night three at Sablefield is night three's cast against 1.85× air. Night progression is
+shared: clearing night three anywhere opens night four everywhere. The sites are
+alternative *places* to play a night, not three campaigns to grind in parallel.
+
 ---
 
 ## Accessibility
 
-Two settings, neither of which touches the simulation:
+Three settings, none of which touches the simulation:
 
 - **Photosensitive mode** caps flashing, strobing, jumpscare shake and post-FX contrast
   to roughly a third.
 - **Reduced jumpscare audio** drops the sting to 35%.
+- **Subtitles** for the phone briefings.
+
+The **difficulty preset** is a separate control and is *not* an accessibility setting:
+it changes the outcome, and it says so.
 
 They are accessibility settings, not difficulty settings. The AI, the resources and the
 outcome are identical with them on.

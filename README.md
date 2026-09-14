@@ -1,20 +1,24 @@
 # The Awakening
 
-An original survival-horror night-shift game for **Unity 6**, set in a decommissioned
-show cave.
+An original survival-horror night-shift game for **Unity 6**, set in three
+decommissioned industrial sites.
 
-You are a reclamation site monitor at **Grotto Springs Family Fun Caverns** — a 1979
-attraction ninety feet under a hillside in Marrow Hollow, closed in 1993 when the
-spring took the lower gallery back. You work 11 PM to 6 AM in the old pump house
-control room. You do not walk anywhere. Everything you can do is a switch on the desk,
-and every switch costs you something somewhere else.
+You are a reclamation site monitor. You work 11 PM to 6 AM in a control room you never
+leave. Everything you can do is a switch on the desk, and every switch costs you
+something somewhere else.
+
+![The cast](docs/renders/cast.png)
+
+*The five characters, rendered straight from `AnimatronicFactory` — the same code the
+game runs, ported to a software rasteriser so the models can be looked at without
+opening Unity. See [Rendering the cast](#rendering-the-cast).*
 
 ---
 
 ## What this repository is
 
-A complete, documented **framework** — roughly 8,500 lines of C# across eleven
-assemblies, four URP shaders, an editor toolchain and an edit-mode test suite — that
+A complete, documented **framework** — roughly 24,000 lines of C# across eleven
+assemblies, five URP shaders, an editor toolchain and an edit-mode test suite — that
 builds a playable game from one menu item.
 
 **It has not been opened in Unity.** It was written in a headless Linux container with
@@ -38,16 +42,16 @@ project is unaffiliated. Please do not add ripped FNAF assets to it.
 
 1. Open the project in **Unity 6** (6000.0 LTS or newer). Let it import; first import
    takes a few minutes while URP compiles.
-2. **Project Settings → Graphics**: assign a **URP Asset**. If you have none, create
-   one with *Assets → Create → Rendering → URP Asset (with Universal Renderer)* and
-   assign it. Nothing renders correctly without this.
-3. **Tools → Grotto → Validate Project**. It will tell you exactly what is missing.
-4. **Tools → Grotto → Build Facility Scene**. This writes the settings assets, then
-   constructs the whole playable scene.
-5. Press **Play**.
+2. **Tools → Grotto → Build Facility Scene**. This builds the render pipeline, writes
+   the settings assets and constructs the playable scene, in that order.
+3. Press **Play**. You land on the title screen.
 
-The cave generates on load and takes about a second. There is nothing to import and no
+The site generates on load and takes about a second. There is nothing to import and no
 art to download — every surface and every sound is produced at runtime.
+
+> If anything looks wrong, **Tools → Grotto → Validate Project** will say what is
+> missing. **Tools → Grotto → Rebuild Render Pipeline** creates the three URP tiers on
+> its own if you only want that part.
 
 > **Optional:** *Tools → Grotto → Asset Fetcher* pulls curated CC0 texture sets that
 > replace the generated ones by name, with no code change. See
@@ -109,11 +113,42 @@ a figure appears in a feed that is empty next sweep, a camera corrupts and costs
 seconds to reboot, the geophones report a contact from a gallery with nothing in it.
 She cannot kill you. She makes the things that can kill you unreadable.
 
-### The map
+### Three sites, and they disagree about what the water is for
 
-21 nodes on four levels, with **four ways into the control room** and a different
-answer to each. Full node table, link gates and design notes in
-[docs/MAP.md](docs/MAP.md).
+Every site has the same four ways in and the same five characters. What changes is
+where the water sits, how fast it moves, and which of your defences it is currently
+taking away. Pick one on the title screen; the second and third unlock as you clear
+nights.
+
+| Site | Opens at | Water | Air | The idea |
+|---|---|---|---|---|
+| **Grotto Springs Family Fun Caverns** *(1979 show cave)* | 45% | ×1.00 | ×1.00 | Balanced. There is a narrow band that shuts out both threats, and holding it is the game |
+| **Hollowmere Hydro Station** *(1931, inside a dam)* | 66% | ×1.55 | ×0.85 | The dry routes **close** as the night goes on and the wet ones **open**. The decision is when to stop fighting it |
+| **Sablefield Grain Terminal** *(1954 elevator)* | 18% | ×0.75 | ×1.85 | The dial is **inverted**. Every dry route is open by default; closing Marlow's burrow means opening Echo's. And the real clock is the air |
+
+Full node tables, link gates and design notes in [docs/MAP.md](docs/MAP.md).
+
+### The survey, and why you look at a camera
+
+Every other system makes the monitor a cost — it draws power, it makes noise, it parks
+your head so you cannot see the doors. A player who works that out ends up staring at a
+blank wall with the monitor down, which is correct play and the least interesting
+version of the game.
+
+So the survey office releases your fuel allowance in stages. Hold a camera on the room
+it asks for and a can's worth of diesel appears in the day tank. It never asks for one
+of your four approaches — which is exactly the problem, because filing a reading always
+means several seconds looking somewhere that cannot hurt you.
+
+### Night events
+
+A night used to be five systems drifting at fixed rates for six hours. Now the building
+does something to you, on a schedule drawn from the night's own seed: an inflow surge, a
+brownout that cuts the generator's available rating, a duct fault, a multiplexer fault,
+or a tremor from the deep gallery that everything hears.
+
+Each is announced six seconds before it lands. An unannounced event is a tax; an
+announced one is a decision.
 
 ---
 
@@ -136,6 +171,10 @@ answer to each. Full node table, link gates and design notes in
 | `` ` `` | Developer console |
 | `F3` | Debug overlay |
 | `J` | Jumpscare test picker — `←` `→` choose, `Enter` fires |
+
+The title screen sits over a live view of the site you have selected, with a site
+picker, a night select carrying that site's own records, a settings screen (audio,
+look, accessibility, difficulty, display) and the cast dossiers.
 
 The night opens on a briefing screen with the shift orders and the full control
 list. It holds the clock until you dismiss it with `Enter`.
@@ -166,7 +205,8 @@ Around 45 commands with tab completion, command history and edit-distance typo
 suggestions. `help` lists them by category.
 
 ```
-night.*    start, restart, hour, time, seed, end, info
+night.*    start, restart, hour, time, seed, end, info, event, events
+survey.*   info, target, file
 ai.*       list, level, levels, move, state, freeze, attack
 power.*    info, fuel, cans, infinite, trip, kill, restore
 env.*      info, air, water, fan, pump, freeze, noise
@@ -266,22 +306,26 @@ built from a firing fundamental and its harmonics.
 Assets/
   Game/
     Scripts/
-      Core/         Clock, night flow, save, events, service locator, debug flags
-      Facility/     Power, ventilation, water, noise, doors, cameras, the graph
-      AI/           Director, controller, five behaviours, the phantom
-      Procedural/   Mesh builder, noise, cave shaper, props, character factory
+      Core/         Clock, night flow, save, events, session request, debug flags
+      Facility/     Power, ventilation, water, noise, survey, night events, the graph
+        Sites/      Three code-authored layouts, the authoring verbs, the catalog
+      AI/           Director, controller, five behaviours, cast spawner, the phantom
+      Procedural/   Mesh builder, cave shaper, fixtures, props, character factory
       Player/       Input, station controller, cap lamp
       Audio/        Synthesis and the mix
       Rendering/    Post FX and atmosphere
-      UI/           HUD, monitor, map, geophones, overlays, menus
-      DevTools/     Console, overlay, gizmos, free camera, ~45 commands
-    Editor/         Scene builder, settings builder, asset fetcher, validator, builds
-    Shaders/        Triplanar rock, water, monitor CRT, condition overlay
+      UI/           HUD, monitor, map, geophones, front end, title stage
+      DevTools/     Console, overlay, gizmos, free camera, ~50 commands
+    Editor/         Scene builder, settings builder, pipeline builder, fetcher, validator
+    Shaders/        Triplanar rock, vertex-lit surfaces, water, monitor CRT, overlay
     AssetManifest.json
-  Tests/EditMode/   Simulation, navigation, AI maths, persistence
+  Tests/EditMode/   Simulation, navigation, sites, night systems, AI maths, persistence
 Tools/
   validate_project.py   C#-aware structural checker, also used by CI
+  check_layouts.py      Parses the site layouts and checks them, also used by CI
+  render_cast.py        Software rasteriser that renders the generated characters
 docs/
+  renders/              The images above
 ```
 
 ---
@@ -308,8 +352,22 @@ The suite covers the things that fail silently:
 - **AI maths** — roll frequency at every level, pressure scaling, seeded determinism,
   and that forked streams stay independent so retuning one character does not reshuffle
   everyone else's rolls
-- **Persistence** — round-tripping, unlock rules, and that a corrupt profile is
-  quarantined rather than deleted
+- **Persistence** — round-tripping, unlock rules, the version 1 → 2 migration, and that
+  a corrupt profile is quarantined rather than deleted
+- **Sites** — properties that must hold for *every* map: no unreachable room at any
+  water level, every wired role present, every character placed somewhere that exists,
+  every attack node an actual approach, no approach nobody uses, and gates in an order
+  that means something. Plus one test asserting the three sites are genuinely different
+  rather than one map with three skins
+- **Night systems** — that the survey never asks for a room you are already watching,
+  that its progress decays rather than resets when you glance at a door, that fuel
+  overflow is not credited, that events warn before they land and lift on their own,
+  and that both are deterministic for a seed
+
+`Tools/check_layouts.py` parses the authored site layouts straight from the C# and
+checks node ids, reachability at every water level, cast placement, approach coverage
+and gate ordering — the class of map bug that would otherwise only show up by opening
+the editor. It is self-tested against a deliberately broken map.
 
 `Tools/validate_project.py` also cross-checks every `using Grotto.X` against the
 owning assembly's references — a real compile error that nothing else can see without
@@ -327,9 +385,13 @@ Stated plainly, because you will hit them:
 
 - **Nothing has been compiled.** No Unity, no `dotnet`, no `mono` in the authoring
   environment. Structural validation passes; type errors are still possible.
+- **`RenderPipelineBuilder` reaches URP's SSAO feature through reflection**, because
+  both the type and its settings struct are internal. Every field is set defensively,
+  so a rename in a future URP leaves SSAO at its own defaults with a warning rather
+  than throwing — but it is the most version-fragile code in the repository.
 - **Package versions in `Packages/manifest.json` are best-known, not verified.** If one
   fails to resolve, Package Manager will offer the nearest compatible version.
-- **The four shaders are unproven.** They follow URP's own pass structure and include
+- **The five shaders are unproven.** They follow URP's own pass structure and include
   correct `ShadowCaster`, `DepthOnly` and `DepthNormals` passes, but a URP HLSL shader
   that has never been through the compiler is a hypothesis. All four degrade gracefully:
   `MaterialLibrary` falls back to URP Lit and the UI falls back to untreated rendering.
@@ -343,13 +405,29 @@ Stated plainly, because you will hit them:
 - **No lightmapping or occlusion culling is baked.** The cave is lit in real time. On a
   large scene this is the first thing to profile.
 
+## Rendering the cast
+
+The characters are generated by `AnimatronicFactory` and never leave Unity, which makes
+them hard to look at while writing them. `Tools/render_cast.py` is a faithful Python
+port of that factory driving a small software rasteriser — z-buffer, perspective-correct
+barycentrics, depth-derived occlusion, ACES tonemap, separable bloom, supersampling — so
+the models can be inspected from a terminal:
+
+```bash
+python3 Tools/render_cast.py --out docs/renders           # all five, plus a contact sheet
+python3 Tools/render_cast.py --out /tmp --only vesper     # one, in about fifteen seconds
+```
+
+It is not a nicety. Rendering found four model bugs that are invisible in the inspector:
+eye lamps buried inside the skull, a jaw hanging below the chin, a waistcoat on the
+character's back, and an exposed ribcage poking through it.
+
 ## Where to take it next
 
-- Bake occlusion culling; the cave's chamber-and-tunnel topology suits it unusually well
+- Bake occlusion culling; the chamber-and-tunnel topology suits it unusually well
 - Voice the six phone briefings (the text is in `SettingsAssetBuilder`)
 - The custom-night UI: `NightDefinition` and the save format already support it
-- A second site — the layout, geometry and AI are all data-driven, so a new map is a
-  new `GrottoSpringsLayout`-style file and nothing else
+- A fourth site — `LayoutAuthoring` plus a `SiteCatalog` entry is the whole job
 
 ---
 

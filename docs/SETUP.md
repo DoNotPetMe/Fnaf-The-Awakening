@@ -12,21 +12,35 @@
 1. Clone and open the folder in Unity Hub. First import takes a few minutes while URP
    compiles its shader variants.
 
-2. **Assign a render pipeline asset.** *Project Settings → Graphics → Default Render
-   Pipeline*. If the field is empty, create one with *Assets → Create → Rendering → URP
-   Asset (with Universal Renderer)* and assign it. **Nothing renders correctly without
-   this** — the four Grotto shaders target URP and fall back to magenta otherwise.
+2. **Tools → Grotto → Build Facility Scene.** This does everything, in order: builds
+   the render pipeline, regenerates the settings assets, then constructs the scene. It
+   takes a few seconds.
 
-   While you are there, *Project Settings → Quality* should point each level at the same
-   asset.
+3. Press **Play**. You land on the title screen, over a live view of the site.
 
-3. **Tools → Grotto → Validate Project.** It reports exactly what is missing, including
-   the pipeline asset, any absent layer and whether the shaders compiled.
+### The render pipeline
 
-4. **Tools → Grotto → Build Facility Scene.** This regenerates the settings assets and
-   then constructs the scene. It takes a few seconds.
+Step 2 creates it for you, but it is worth knowing what it did, because it is the one
+thing that makes the difference between the game and a magenta cave.
 
-5. Press **Play**. The cave generates on load.
+*Tools → Grotto → Rebuild Render Pipeline* writes three URP assets — `URP_Low`,
+`URP_Medium`, `URP_High` — into `Assets/Game/Settings/Rendering`, assigns them across
+the project's quality levels, and sets the Medium one as the default. Each is
+configured for one specific kind of scene: a dark interior lit by a handful of small,
+moving, shadow-casting lamps, viewed from a fixed seat.
+
+That means HDR on, depth and opaque textures on (the water shader and the fog both read
+them), one shadow cascade at short distance rather than four spread over ground nothing
+occupies, eight per-object lights because the station has six, Forward+, and SSAO.
+
+If you would rather configure it by hand, the shaders only require:
+
+- **HDR** on — a cap lamp at intensity 3.2 in a 0.05-ambient room is a 60:1 range
+- **Depth texture** and **opaque texture** on
+- **Additional lights: per pixel**, limit 8
+
+4. **Tools → Grotto → Validate Project** reports anything still missing — an absent
+   layer, a shader that did not compile, a settings asset that was not written.
 
 ## If a package fails to resolve
 

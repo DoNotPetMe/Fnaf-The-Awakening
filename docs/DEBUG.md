@@ -70,6 +70,20 @@ argument they toggle**, because that is what anyone typing `ai.freeze` actually 
 | `night.seed [value]` | Force the seed for all subsequent nights; no argument clears |
 | `night.end [outcome]` | End as survived / killed / flooded / suffocated / aborted |
 | `night.info` | Night, phase, clock, seed, draw count, environment scales |
+| `night.event <kind>` | Force a disturbance: `surge`, `brownout`, `vent`, `tremor`, `feed`, or `none` to clear |
+| `night.events` | What is running or inbound, and how long is left of it |
+
+### survey
+
+| Command | Effect |
+|---|---|
+| `survey.info` | Readings filed, current target, dwell progress, litres released |
+| `survey.target <node>` | Point the survey at a room |
+| `survey.file` | File the current reading immediately |
+
+Between them these make the survey testable without sitting through a four-and-a-half
+second dwell per reading: `survey.target GRAND` then `survey.file` puts fourteen litres
+in the tank and moves it on.
 
 ### ai
 

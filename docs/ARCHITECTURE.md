@@ -77,18 +77,42 @@ the debug overlay and the tests all agree, because they all read the same field.
 Mesh-level movement is then layered on top: `TickTransit` interpolates the transform
 between node positions while `CurrentNode` stays at the origin until arrival.
 
-### 3. One layout asset drives four things
+### 3. One layout drives everything, and the scene names no room
 
-`FacilityLayout` describes nodes (id, kind, world position, size, camera, coupling) and
-links (traversal mask, water gates, barrier, traverse time, noise transmission). From
-it:
+`FacilityLayout` describes nodes (id, kind, world position, size, camera, coupling),
+links (traversal mask, water gates, barrier, traverse time, noise transmission), which
+node plays which structural role, where each character lives, and what the site is made
+of. From it, at load:
 
-- `FacilityGraph` — what the AI navigates
-- `FacilityBuilder` — the geometry, generated at load
-- `FacilitySceneBuilder` — where the cameras go
-- `MapWidget` — the plan on the monitor
+| Consumer | Builds |
+|---|---|
+| `FacilityGraph` | What the AI navigates |
+| `FacilityGeometrySpawner` → `FacilityBuilder` | The cavern, the connectors, the lighting rig, the water table |
+| `SiteFixtureSpawner` | The blast doors, the grate, the floodlights, the camera rig |
+| `CastSpawner` | The five characters, at this site's home rooms |
+| `MapWidget` | The plan on the monitor |
 
-Move a room and all four follow. The scene is a **build product**.
+Move a room and all five follow.
+
+The important consequence is that **`Facility.unity` contains no room names at all.**
+It holds the seat, the camera rig, the interface, the dev tools and a handful of spawner
+components. That is what makes three maps possible without three scenes — and it is also
+why the scene file stays small, text-only and reviewable in a pull request, which is not
+something you can usually say about a level.
+
+Which site loads is decided before anything is built. `SiteCatalog` is the one place
+that knows which sites exist; code is the source of truth and a baked asset in
+`Resources` is an override, so a fresh clone works with no setup and a designer's
+tweaked asset is never silently ignored.
+
+### Changing site means reloading the scene
+
+`SessionRequest` carries "play night N at site S" across a scene reload, and the front
+end goes through it rather than rebuilding live. That is deliberate: the geometry, the
+fixtures, the camera rig and the cast are all built at `Awake` from the chosen layout,
+and tearing that down while half the scene holds references into it is a worse answer
+than a one-second reload — which is also exactly what a loading beat in this kind of
+game is for.
 
 ---
 
@@ -178,14 +202,35 @@ Nothing binary is committed, and nothing binary is written into the scene file.
 |---|---|---|
 | Cave geometry | `FacilityGeometrySpawner` → `FacilityBuilder` | Unity serialises any referenced non-asset mesh *into the scene*; a generated cavern would make it a multi-megabyte blob |
 | Fixture meshes | `ProceduralMeshSpawner` | Same, at smaller scale |
+| Doors, grate, floodlights, cameras | `SiteFixtureSpawner` | Their *positions* depend on the site, which is chosen at the menu |
+| The cast | `CastSpawner` | Which rooms they start in is a property of the building |
+| The render pipeline | `RenderPipelineBuilder` (editor) | Three URP tiers, every setting a decision this game has an opinion about |
 | Character models | `AnimatronicModelSpawner` → `AnimatronicFactory` | Same, plus the model stays in step with the definition automatically |
 | Surfaces | `TextureFactory` → `MaterialLibrary` | Overridden by `Resources/Art/<name>_Albedo` when present |
 | Audio | `ProceduralAudio` → `AudioDirector` | Overridden by `Resources/Audio/<name>` when present |
 | Post FX profile | `PostFxController` | A volume profile is YAML nobody can review and nobody can merge |
 | UI | `UIFactory` | Prefabs are opaque; this interface is a fixed instrument panel |
 
-Both spawners offer an editor preview built under `HideFlags.DontSave`, so a designer
-can look at the geometry without it ever reaching the scene file.
+The spawners offer an editor preview built under `HideFlags.DontSave`, so a designer can
+look at the geometry without it ever reaching the scene file.
+
+### Two shading decisions worth knowing about
+
+**Vertex occlusion.** `MeshBuilder.BakeVertexOcclusion` writes a curvature-derived
+occlusion term into the vertex alpha: for each vertex, which side of its tangent plane
+its neighbours sit on, accumulated as bare dot products over a sum of edge lengths. The
+quotient is a curvature in reciprocal metres rather than an angle per edge — and that
+distinction is the whole correctness of it, because without it a twenty-metre chamber
+and a forty-centimetre crevice tessellated with the same ring count come out identically
+occluded. Screen-space occlusion covers the last few centimetres; this covers the
+metre-scale gradient where a wall meets a floor, which is most of what makes generated
+rock read as rock.
+
+**Detail normals from derivatives.** Neither shader ships a normal map, because a normal
+map is a binary asset. Instead the luminance of whatever the albedo sampler produced is
+treated as a height field and its screen-space gradient projected onto the surface. It
+is scale-correct for free, it works over triplanar seams exactly as well as the albedo
+does, and it costs two derivatives.
 
 ---
 

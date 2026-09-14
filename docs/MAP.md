@@ -1,3 +1,27 @@
+# The sites
+
+Three buildings, the same four ways in, the same five characters. What changes between
+them is where the water sits, how fast it moves, and which of your defences it is
+currently taking away.
+
+| Site | Id | Unlocks | Palette | Emphasis |
+|---|---|---|---|---|
+| [Grotto Springs Family Fun Caverns](#grotto-springs-family-fun-caverns) | `grotto` | always | Limestone | Balanced |
+| [Hollowmere Hydro Station](#hollowmere-hydro-station) | `hollowmere` | 2 nights cleared | Concrete | Water, relentless |
+| [Sablefield Grain Terminal](#sablefield-grain-terminal) | `sablefield` | 4 nights cleared | Steel | Air, inverted water |
+
+All three are authored in code under
+[`Assets/Game/Scripts/Facility/Sites/`](../Assets/Game/Scripts/Facility/Sites/), through
+the verbs in `LayoutAuthoring` — so every threshold sits next to the note explaining why
+it has that value, and a map change is reviewable as a list of moved nodes rather than a
+wall of changed YAML guids. `SiteCatalog` is the one place that knows which sites exist.
+
+`python3 Tools/check_layouts.py` parses all three straight from the C# and checks node
+ids, reachability at every water level, cast placement, approach coverage and gate
+ordering. It runs in CI.
+
+---
+
 # Grotto Springs Family Fun Caverns
 
 > Opened July 1979 in the Marrow Hollow limestone system: a show cavern, a mineral
@@ -5,11 +29,13 @@
 > spring took the lower gallery back. The cast was never recovered — the insurers
 > called it cheaper to leave them.
 
-The map is authored in code, in
-[`GrottoSpringsLayout.cs`](../Assets/Game/Scripts/Facility/GrottoSpringsLayout.cs), so
-every threshold sits next to the note explaining why it has that value.
+[`Sites/GrottoSpringsLayout.cs`](../Assets/Game/Scripts/Facility/Sites/GrottoSpringsLayout.cs).
 *Tools → Grotto → Rebuild Settings Assets* bakes it into a ScriptableObject a designer
 can then tweak in the inspector.
+
+**Starts at 45% water. Water ×1.00, air ×1.00, fuel ×1.00.** The reference site: there
+is a narrow band between the dig mark and the swim mark that shuts out both threats, and
+holding it while everything else drifts is the game.
 
 ---
 
@@ -181,13 +207,124 @@ the data instead of in a special case.
 
 ---
 
-## Changing the map
+# Hollowmere Hydro Station
 
-1. Edit `GrottoSpringsLayout.Populate`.
-2. *Tools → Grotto → Rebuild Settings Assets*.
-3. *Tools → Grotto → Build Facility Scene*.
+> Commissioned 1931 on the Hollowmere reservoir: two 900kW Francis sets in a hall cut
+> into the dam's toe. A visitor gallery and an animatronic show were added in 1968 to
+> sell the place as a day out. Generation stopped in 1989. The dam did not.
 
-Geometry, the navigation graph, the camera placements and the monitor's plan all follow
-automatically, because all four read the same asset. `map.validate` in the console and
-*Tools → Grotto → Validate Project* will report orphaned nodes, impossible links and
-attack nodes with no route to the station.
+[`Sites/HollowmereLayout.cs`](../Assets/Game/Scripts/Facility/Sites/HollowmereLayout.cs).
+
+**Starts at 66% water. Water ×1.55, air ×0.85, fuel ×1.15.**
+Gates: dig ≤ 0.22, wade ≤ 0.34, swim ≥ 0.42, drowned > 0.80.
+
+Grotto Springs asks you to hold the water somewhere in the middle. Hollowmere takes the
+dial away. You are inside the dam: the level is not a choice you make once an hour, it
+is a thing that rises on its own and that your pump only slows. Every night starts two
+thirds flooded and gets worse.
+
+What that does to the map:
+
+- **The dry routes close.** Marlow's burrow under the generator floor and the walk out
+  along the draft tube both shut the moment the level passes 0.34, and they do not
+  reopen without serious pump power.
+- **The wet routes open.** The tailrace, the penstock and the wheel pit stitch the far
+  end of the building to the sump the instant the level clears 0.42. Echo lives there.
+- **The top of the dam drowns at 0.80**, which takes the long way round off the table
+  for everybody — including you, if you were counting on Barty needing eleven seconds
+  to come back.
+
+So the night is a slide from one threat model to another, and the interesting decision
+is when to stop fighting it. Pump hard early and you buy a dry hour you have to survive
+with Marlow in the floor; let it go and you trade him for Echo, who is worse, but who
+at least only uses two doors.
+
+**Structure.** The station is the switch room; the visitor gallery and the cable gallery
+are the two doors; the draft tube is the sump; the ventilation shaft is the chase. West
+is the turbine hall, the penstock, the intake tower and the forebay, climbing to the dam
+crest. East is the fitting shop, the generator floor and the cable duct. South-east, and
+underwater most of the night, are the tailrace and the wheel pit — the blind room the
+geophones exist for.
+
+| Character | Home | Retreat | Enters by |
+|---|---|---|---|
+| Barty | `TURBINE` | `TURBINE` | `GALLERY`, `CABLEWAY` |
+| Vesper | `PENSTOCK` | `TURBINE` | `AIRSHAFT` |
+| Marlow | `FITTING` | `GENFLOOR` | `DRAFTTUBE` |
+| Echo | `WHEELPIT` | `TAILRACE` | `DRAFTTUBE` |
+| The Chorus | `WHEELPIT` | `WHEELPIT` | `GALLERY`, `CABLEWAY`, `DRAFTTUBE` |
+
+---
+
+# Sablefield Grain Terminal
+
+> Built 1954 beside the Sablefield branch line: a hundred-and-ten-foot slipformed
+> elevator, twenty bins, and a leg that could lift four thousand bushels an hour. The
+> annex became a walk-through attraction in 1977 to keep the co-op solvent. A dust
+> explosion in 1986 took the headhouse roof off. The cast was inside it.
+
+[`Sites/SablefieldLayout.cs`](../Assets/Game/Scripts/Facility/Sites/SablefieldLayout.cs).
+
+**Starts at 18% water. Water ×0.75, air ×1.85, fuel ×0.95.**
+Gates: dig ≤ 0.30, wade ≤ 0.45, swim ≥ 0.58, drowned > 0.88.
+
+This is the site where the water dial is **inverted**.
+
+The building sits high and dry. It starts at 18%, which at any other site would be an
+emergency and here is simply Tuesday. Every dry route is open by default — Marlow's
+burrow, the pit walk, the whole south loop — and the only way to close them is to let
+the sump fill, which means running the pump backwards from the habit two maps have
+built.
+
+And letting it fill costs you twice:
+
+- Above 0.55 the sump well joins the dust pit and the pit, which is Echo's entire road
+  in. You closed Marlow's door by opening Echo's.
+- Air decays at ×1.85. A grain elevator full of settled dust has to be ventilated hard
+  and continuously, and the fan is the single biggest draw on the board. Time spent
+  thinking about water is time the fan was off.
+
+So Sablefield is about the air, and the water is a lever you pull exactly when you have
+the power budget for the consequences.
+
+**Structure.** The station is the weighbridge office; the conveyor tunnel and the
+elevator boot pit are the two doors; the dust collection pit is the sump; the dust
+trunking is the chase. The silos are the vertical spine — everything climbs, from the
+Harvest Hollow annex up Silo A to the headhouse and out along the belt gallery. Silo B
+has no camera and bottoms out in the pit, so anything taking that route disappears from
+the monitor entirely.
+
+| Character | Home | Retreat | Enters by |
+|---|---|---|---|
+| Barty | `STAGE` | `ANNEX` | `TUNNEL`, `BOOTPIT` |
+| Vesper | `SILO_A` | `HEADHOUSE` | `TRUNKING` |
+| Marlow | `DRIER` | `PLANT` | `DUSTPIT` |
+| Echo | `PIT` | `SUMPWELL` | `DUSTPIT` |
+| The Chorus | `PIT` | `PIT` | `TUNNEL`, `BOOTPIT`, `DUSTPIT` |
+
+Marlow starts the night with his burrow *open*, which is new: at both other sites he has
+to wait for the pump. Here he has to be flooded out. And Echo needs 0.58 on a night that
+starts at 0.18, so he is a threat the player creates. That is the whole joke of the site.
+
+---
+
+## Changing a map
+
+1. Edit the site's `Populate` method under `Assets/Game/Scripts/Facility/Sites/`.
+2. `python3 Tools/check_layouts.py` — catches typo'd node ids, unreachable rooms,
+   attack nodes that are not approaches, and gates in the wrong order.
+3. *Tools → Grotto → Rebuild Settings Assets*.
+
+Geometry, the navigation graph, the fixtures, the camera rig, the cast and the monitor's
+plan all follow automatically, because all of them read the same layout at load. The
+scene does not need rebuilding for a map change — it names no room at all.
+
+## Adding a map
+
+1. Write `Sites/YourSiteLayout.cs` with a `public static void Populate(FacilityLayout)`,
+   using the verbs in `LayoutAuthoring`. Declare the station first: `StationApproaches`
+   wires `nodes[0]`.
+2. Add one line to `SiteCatalog.Entries`.
+
+That is the whole job. `SiteTests` will then hold your new map to the same contract as
+the other three.
