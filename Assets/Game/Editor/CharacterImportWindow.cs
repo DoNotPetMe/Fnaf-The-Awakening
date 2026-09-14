@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.PackageManager;
 using UnityEngine;
 using Grotto.AI;
 using Grotto.Core;
@@ -106,7 +107,7 @@ namespace Grotto.Editor
 
             EditorGUILayout.LabelField("Import a character model", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Drop in an FBX, OBJ or glTF and it replaces the generated character.\n\n" +
+                "Drop in an FBX, GLB or glTF and it replaces the generated character.\n\n" +
                 "The model is scaled to the character's authored height and its bones are " +
                 "matched to the ones the game drives. Check the matches below before you save — " +
                 "the only one that matters is Head.",
@@ -187,8 +188,10 @@ namespace Grotto.Editor
             if (_source == null)
             {
                 EditorGUILayout.HelpBox(
-                    "Drag the imported model asset here — the FBX/OBJ/glTF itself, not a " +
-                    "prefab you made from it.",
+                    "Drag the imported model asset here — the FBX/GLB/glTF itself, not a " +
+                    "prefab you made from it.\n\n" +
+                    "If you dropped a .glb into the project and nothing appeared, Unity cannot " +
+                    "read glTF yet. See the box at the bottom of this window.",
                     MessageType.Info);
                 return;
             }
@@ -364,17 +367,66 @@ namespace Grotto.Editor
                 $"    Writes {ModelsFolder}/{_definition?.id}.prefab", EditorStyles.miniLabel);
         }
 
+        /// <summary>
+        /// Whether anything in the project can read a .glb or .gltf.
+        ///
+        /// Unity imports FBX, OBJ, DAE and a few others out of the box. It does
+        /// <b>not</b> import glTF — that needs a package. Since glTF is what Sketchfab
+        /// hands you by default, and since the failure mode is "Unity ignores the file
+        /// entirely with no error at all", it is worth saying out loud on the one
+        /// screen where somebody is about to try it.
+        /// </summary>
+        private static bool HasGltfImporter()
+        {
+            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (assembly.GetType("GLTFast.GltfImport") != null) return true;
+                if (assembly.GetType("UnityGLTF.GLTFSceneImporter") != null) return true;
+            }
+            return false;
+        }
+
         private static void DrawWhereToGetModels()
         {
             EditorGUILayout.LabelField("Where to get models", EditorStyles.boldLabel);
+
+            if (!HasGltfImporter())
+            {
+                EditorGUILayout.HelpBox(
+                    "This project cannot read .glb or .gltf files yet.\n\n" +
+                    "Unity imports FBX and OBJ out of the box but not glTF — which is what " +
+                    "Sketchfab gives you by default. Worse, the failure is silent: drop a .glb " +
+                    "into the project and Unity ignores it with no error.\n\n" +
+                    "glTFast is Unity's own package for this and it is in the manifest already; " +
+                    "if it has not resolved, install it here.",
+                    MessageType.Warning);
+
+                if (GUILayout.Button("Install glTF support (com.unity.cloud.gltfast)"))
+                {
+                    Client.Add("com.unity.cloud.gltfast");
+                    EditorUtility.DisplayDialog("Installing",
+                        "Package Manager is fetching glTFast. Unity will recompile when it " +
+                        "lands, then .glb and .gltf files import like any other model.", "OK");
+                }
+
+                EditorGUILayout.Space(6);
+            }
+
             EditorGUILayout.HelpBox(
                 "Sketchfab has thousands of animatronic and mascot-robot models — filter by " +
                 "Downloadable and by licence. The Unity Asset Store, itch.io and the FNAF " +
                 "fan-model community all have more.\n\n" +
-                "Two practical notes. Prefer FBX or glTF over OBJ: OBJ carries no skeleton, so " +
-                "you lose the head tracking and the jaw. And whatever you download, put its " +
-                "licence in the credit box above — a project full of models whose origin nobody " +
-                "recorded is a project that can never be released.",
+                "FORMAT: take GLB if it is offered. It is one self-contained file with the " +
+                "textures inside it, where a .gltf arrives as a .gltf plus a .bin plus a folder " +
+                "of images — and a broken texture path is the usual reason an import comes in " +
+                "grey. Avoid OBJ: it carries no skeleton, so you lose the head tracking and the " +
+                "jaw. Ignore USDZ; it is an Apple AR format and Unity will not read it.\n\n" +
+                "Take the largest texture size on offer. You can downscale in Unity's import " +
+                "settings and you cannot upscale.\n\n" +
+                "Whatever you download, put its licence in the credit box above — a project " +
+                "full of models whose origin nobody recorded is a project that can never be " +
+                "released. Sketchfab's download dialog has a COPY CREDITS button that gives " +
+                "you exactly the right text.",
                 MessageType.None);
 
             if (GUILayout.Button("Open docs/MODELS.md"))

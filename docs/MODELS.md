@@ -35,12 +35,41 @@ the five and leaving the other four is a perfectly normal state to be in.
 | **Blender Market / CGTrader / TurboSquid** | Commercial, high quality | Check the licence permits game use |
 | **Mixamo** | Not characters, but free auto-rigging | Upload an unrigged model, get a rigged one back. The binder handles Mixamo naming perfectly |
 
-### What to look for
+### Which format
 
-**FBX or glTF, not OBJ.** OBJ carries geometry and nothing else — no skeleton. An OBJ
-model still works, but it will not turn its head or open its mouth, because there is
-nothing to turn. The importer plants a head proxy so the camera and the jumpscare still
-frame correctly, and that is the best it can do.
+Sketchfab usually offers four or five. Take **GLB**, at the largest texture size listed.
+
+| Format | Verdict | Why |
+|---|---|---|
+| **GLB** | **Take this** | One self-contained binary — geometry, skeleton and textures in a single file. Nothing to go missing |
+| **glTF** (`.gltf`) | Works | Arrives as a `.gltf` plus a `.bin` plus a folder of images. A broken texture path is the usual reason an import comes in grey. Keep the whole folder together |
+| **FBX** | Take this if no GLB | Unity's native format, no package needed |
+| **OBJ** | Last resort | No skeleton. The model works but never turns its head or opens its mouth |
+| **USDZ** | Never | Apple AR format. Unity will not read it |
+
+On texture size: take the biggest. You can downscale in Unity's import settings and you
+cannot upscale, and a few extra megabytes on disk costs nothing.
+
+On "Original format" versus "Converted": the original is what the author uploaded and is
+the highest fidelity, but it is whatever they happened to export — sometimes a zip with
+external textures and odd paths. Sketchfab's converted GLB is a clean re-export that
+preserves the skinning. **Start with the converted GLB.** If the rig comes through wrong,
+fall back to the original.
+
+### glTF needs a package — this catches everybody
+
+**Unity does not import `.glb` or `.gltf` out of the box.** It reads FBX, OBJ, DAE and a
+few others natively; glTF needs `com.unity.cloud.gltfast`, which is in this project's
+`Packages/manifest.json` already.
+
+The reason this is worth a heading: **the failure is silent.** Drop a `.glb` into a
+project without the package and Unity ignores the file completely — no error, no warning,
+it simply does not appear as a model asset. It looks like you did something wrong.
+
+If it has not resolved, the import window detects it and has a one-click install button,
+or *Window → Package Manager → + → Add package by name →* `com.unity.cloud.gltfast`.
+
+### What else to look for
 
 **Rigged, if you can get it.** A rigged model gets head tracking, a working jaw and the
 servo idle. An unrigged one is a statue that slides between rooms.
@@ -48,6 +77,11 @@ servo idle. An unrigged one is a statue that slides between rooms.
 **Any scale, any units.** Genuinely does not matter. The importer measures the model and
 scales it to the character's authored height, so a Source-ported model at 1:52 and a
 Blender export at 1:1 both come out the right size.
+
+**Check the licence, then record it.** CC-BY ("CC Attribution") is the common one on
+Sketchfab and it means you may use it commercially as long as you credit the author.
+Sketchfab's download dialog has a **COPY CREDITS** button that produces exactly the right
+text — paste that straight into the importer's credit box.
 
 ### On ripped assets
 
@@ -122,6 +156,10 @@ It only touches shaders URP cannot render — `Standard`, `Legacy Shaders/*`, `M
 `Autodesk Interactive`. A model that already ships URP or a custom shader is left exactly
 as its author made it.
 
+A glTF or GLB imported through glTFast already arrives with pipeline-correct materials,
+so the conversion pass sees nothing to do and leaves it alone. This mostly matters for
+FBX, which is where Standard materials come from.
+
 ### Eyes
 
 The eye glow is not decoration. It is how you identify a character at twenty metres in an
@@ -165,12 +203,16 @@ never be released.
 
 | Symptom | Cause |
 |---|---|
+| **The .glb does not appear in Unity at all** | No glTF importer. See the section above — the failure is silent, which is why it looks like something else |
 | **Magenta character** | Materials did not convert. Re-import with *Convert materials to URP* on, or set the shader to URP Lit by hand |
+| **Grey / untextured** | A `.gltf` whose external textures did not come with it. Use the GLB instead |
 | **Facing away from you** | Rotation Y = 180 in the settings asset |
 | **Lying on its side** | Z-up export. Rotation X = -90 |
 | **Enormous or microscopic** | Auto-fit is off, or the model has no renderers to measure. Check the import settings |
 | **Sunk into the floor** | The model has a stray renderer far below the body — a ground plane or a shadow quad is the usual culprit. Delete it from the source |
 | **Head does not turn** | No head bone was bound, so a proxy is in use. Pick the real one in the import window |
+| **Every bone is called `Object_4`** | Some Sketchfab GLB conversions flatten node names. The binder finds nothing and plants a proxy; either bind Head by hand in the window, or download the original format instead, which keeps the author's names |
+| **Parts you do not want are visible** | Plenty of models ship variant or optional meshes that are all enabled at once. Open the saved prefab and disable or delete them — the importer does not touch mesh visibility |
 | **Eyes in the wrong place** | Move them in the prefab — they are plain child objects of the head |
 | **Nothing changed after importing** | The model has to be at `Resources/Cast/Models/<id>`, where `<id>` is the character's id (`barty`, not `Bartholomew Bellows`). The window handles this; a hand-placed file may not |
 
