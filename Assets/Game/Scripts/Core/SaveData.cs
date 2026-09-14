@@ -11,11 +11,23 @@ namespace Grotto.Core
     public class SaveData
     {
         /// <summary>Bump when the shape changes; <see cref="SaveSystem"/> migrates on load.</summary>
-        public const int CurrentVersion = 1;
+        /// <remarks>
+        /// 2 — added <see cref="selectedSiteId"/> and per-site records. A version 1
+        /// profile has neither; the migration fills them in from the flat night list
+        /// and assumes every night on record was played at the grotto, which it was,
+        /// because that was the only site that existed.
+        /// </remarks>
+        public const int CurrentVersion = 2;
 
         public int version = CurrentVersion;
         public string createdUtc = string.Empty;
         public string lastPlayedUtc = string.Empty;
+
+        /// <summary>
+        /// Which site the player last chose. Validated against the catalog on load —
+        /// an unknown or still-locked id reverts rather than throwing.
+        /// </summary>
+        public string selectedSiteId = "grotto";
 
         public int highestNightUnlocked = 1;
         public bool nightSixUnlocked;
@@ -27,14 +39,61 @@ namespace Grotto.Core
         public List<AiLevelEntry> customNightLevels = new List<AiLevelEntry>();
         public SettingsData settings = new SettingsData();
 
-        public NightRecord GetOrCreateRecord(int night)
+        /// <summary>
+        /// The record for one night at one site, created if it does not exist.
+        ///
+        /// Records are keyed by (site, night) rather than by night alone, so clearing
+        /// night three at the hydro station does not overwrite the grotto's night
+        /// three. A null or empty site falls back to whatever is currently selected,
+        /// which keeps older call sites working unchanged.
+        /// </summary>
+        public NightRecord GetOrCreateRecord(int night, string site = null)
         {
-            for (int i = 0; i < nightRecords.Count; i++)
-                if (nightRecords[i].night == night) return nightRecords[i];
+            string key = Normalise(site);
 
-            var record = new NightRecord { night = night };
+            for (int i = 0; i < nightRecords.Count; i++)
+                if (nightRecords[i].night == night && SameSite(nightRecords[i].siteId, key))
+                    return nightRecords[i];
+
+            var record = new NightRecord { night = night, siteId = key };
             nightRecords.Add(record);
             return record;
+        }
+
+        /// <summary>Highest night cleared at one site, or 0 if none.</summary>
+        public int HighestNightCleared(string site = null)
+        {
+            string key = Normalise(site);
+
+            int best = 0;
+            for (int i = 0; i < nightRecords.Count; i++)
+            {
+                var record = nightRecords[i];
+                if (record.completed && SameSite(record.siteId, key) && record.night > best)
+                    best = record.night;
+            }
+            return best;
+        }
+
+        /// <summary>Nights cleared anywhere. This is what unlocks the other sites.</summary>
+        public int TotalNightsCleared()
+        {
+            int cleared = 0;
+            for (int i = 0; i < nightRecords.Count; i++)
+                if (nightRecords[i].completed) cleared++;
+            return cleared;
+        }
+
+        private string Normalise(string site)
+            => string.IsNullOrWhiteSpace(site)
+                ? (string.IsNullOrWhiteSpace(selectedSiteId) ? "grotto" : selectedSiteId)
+                : site;
+
+        private static bool SameSite(string a, string b)
+        {
+            if (string.IsNullOrWhiteSpace(a)) a = "grotto";
+            if (string.IsNullOrWhiteSpace(b)) b = "grotto";
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -42,6 +101,10 @@ namespace Grotto.Core
     public class NightRecord
     {
         public int night;
+
+        /// <summary>Which site this record belongs to. Empty means the original grotto.</summary>
+        public string siteId = "grotto";
+
         public bool completed;
         public int attempts;
         public int deaths;

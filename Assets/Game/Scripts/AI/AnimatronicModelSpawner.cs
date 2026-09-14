@@ -26,6 +26,13 @@ namespace Grotto.AI
 
         public AnimatronicRig Rig { get; private set; }
 
+        /// <summary>Assigns the character to build. See <see cref="AnimatronicController.Configure"/>.</summary>
+        public void Configure(AnimatronicDefinition characterDefinition, bool servos = true)
+        {
+            definition = characterDefinition;
+            addServoAnimator = servos;
+        }
+
         private void Awake() => Generate();
 
         private void OnDestroy() => Clear();

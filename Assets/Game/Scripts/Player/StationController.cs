@@ -74,9 +74,9 @@ namespace Grotto.Player
         // Start, and this component runs at -600 — long before them. Caching here
         // captured nulls every time, which is why pressing a door key reported that
         // no door was wired to the station.
-        private BlastDoor DoorNorth => _facility.GetBarrier(GrottoSpringsLayout.DoorNorth) as BlastDoor;
-        private BlastDoor DoorSouth => _facility.GetBarrier(GrottoSpringsLayout.DoorSouth) as BlastDoor;
-        private SumpGrate Grate => _facility.GetBarrier(GrottoSpringsLayout.SumpGrate) as SumpGrate;
+        private BlastDoor DoorNorth => _facility.GetBarrier(FacilityBarriers.DoorNorth) as BlastDoor;
+        private BlastDoor DoorSouth => _facility.GetBarrier(FacilityBarriers.DoorSouth) as BlastDoor;
+        private SumpGrate Grate => _facility.GetBarrier(FacilityBarriers.SumpGrate) as SumpGrate;
 
         private float _targetYaw;
         private float _targetPitch;

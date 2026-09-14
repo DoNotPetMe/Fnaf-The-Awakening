@@ -47,6 +47,18 @@ namespace Grotto.Facility
             }
         }
 
+        /// <summary>Wires this camera from code. See <see cref="BlastDoor.Configure"/>.</summary>
+        public void Configure(string node, int feedWidth, int feedHeight,
+            bool sweep, float sweepDegrees, float sweepSeconds)
+        {
+            nodeId = node;
+            width = feedWidth;
+            height = feedHeight;
+            this.sweep = sweep;
+            this.sweepDegrees = sweepDegrees;
+            this.sweepSeconds = sweepSeconds;
+        }
+
         private void Awake()
         {
             _id = new NodeId(nodeId);

@@ -74,6 +74,28 @@ namespace Grotto.AI
             ServiceLocator.Register(this);
         }
 
+        /// <summary>
+        /// Hands the director a cast built at runtime, replacing whatever the scene had.
+        ///
+        /// The scene cannot bake the cast any more: which characters exist, and which
+        /// rooms they start in, is a property of the *site*, and the site is chosen at
+        /// the menu. <see cref="CastSpawner"/> builds them once the layout is known and
+        /// calls this before the director's own Awake.
+        /// </summary>
+        public void RegisterCast(IReadOnlyList<AnimatronicController> controllers)
+        {
+            cast.Clear();
+            if (controllers == null) return;
+
+            for (int i = 0; i < controllers.Count; i++)
+                if (controllers[i] != null) cast.Add(controllers[i]);
+
+            // A cast swapped in mid-night is re-initialised immediately; one swapped in
+            // before the night starts is picked up by OnNightBegun as usual.
+            if (_facility != null)
+                InitialiseCast(_night?.CurrentDefinition, _night != null ? _night.Rng : new RandomSource(1337));
+        }
+
         private void OnDestroy()
         {
             if (_night != null)

@@ -92,7 +92,7 @@ namespace Grotto.Procedural
 
             float spineLean = spec.species switch
             {
-                Species.Salamander => 62f,   // near-horizontal
+                Species.Salamander => 38f,   // low and forward, but still standing
                 Species.Bat => 26f,
                 Species.Mole => 16f,
                 Species.Composite => 20f,
@@ -104,7 +104,13 @@ namespace Grotto.Procedural
             rig.Chest = Bone("Chest", rig.Spine, new Vector3(0f, 0.22f * scale, 0f), Quaternion.Euler(spineLean * 0.6f, 0f, 0f));
             rig.Neck = Bone("Neck", rig.Chest, new Vector3(0f, 0.24f * scale, 0f), Quaternion.Euler(-spineLean * 0.8f, 0f, 0f));
             rig.Head = Bone("Head", rig.Neck, new Vector3(0f, 0.12f * scale, 0f), Quaternion.identity);
-            rig.Jaw = Bone("Jaw", rig.Head, new Vector3(0f, -0.04f * scale, 0.06f * scale), Quaternion.identity);
+
+            // The jaw hinge has to be measured in head units, not body units, or a
+            // character with a large headScale ends up with its mouth hanging below
+            // its chin. This is the same figure BuildHead uses.
+            float headRadius = HeadRadius(spec, scale);
+            rig.Jaw = Bone("Jaw", rig.Head,
+                new Vector3(0f, headRadius * 0.14f, headRadius * 0.30f), Quaternion.identity);
 
             float shoulderWidth = 0.22f * spec.bulk;
 
@@ -136,6 +142,17 @@ namespace Grotto.Procedural
                 rig.Tail = Bone("Tail", rig.Hips, new Vector3(0f, 0.02f * scale, -0.16f * scale), Quaternion.Euler(-14f, 0f, 0f));
         }
 
+        /// <summary>Skull radius. Used by both the skeleton and the head parts.</summary>
+        private static float HeadRadius(AnimatronicModelSpec spec, float scale)
+            => 0.17f * spec.headScale * scale;
+
+        /// <summary>
+        /// Local Z of the chest shell's front face, before the character scale. The
+        /// chest box is 0.26 * bulk deep, so anything mounted on it has to scale the
+        /// same way or it detaches on light builds.
+        /// </summary>
+        private static float ChestFront(AnimatronicModelSpec spec) => 0.13f * spec.bulk;
+
         private static Transform Bone(string boneName, Transform parent, Vector3 localPosition, Quaternion localRotation)
         {
             var go = new GameObject(boneName);
@@ -163,8 +180,8 @@ namespace Grotto.Procedural
             // Belly.
             var spine = batch(rig.Spine).For(SurfaceKind.AnimatronicShell);
             spine.CurrentColor = Weathered(spec.shellSecondary, spec, 2);
-            spine.AddSphere(new Vector3(0f, 0.09f, 0.02f) * scale, 0.20f * scale, 12, 8,
-                new Vector3(bulk * 1.05f, 0.95f, bulk * 0.92f));
+            spine.AddSphere(new Vector3(0f, 0.09f, 0.03f) * scale, 0.17f * scale, 14, 10,
+                new Vector3(bulk * 0.95f, 0.95f, bulk * 0.85f));
 
             // Chest.
             var chest = batch(rig.Chest).For(SurfaceKind.AnimatronicShell);
@@ -179,19 +196,30 @@ namespace Grotto.Procedural
                 var frame = batch(rig.Chest).For(SurfaceKind.AnimatronicMetal);
                 frame.CurrentColor = new Color(0.6f, 0.6f, 0.62f);
 
+                // +Z is forward, and the offset has to follow the chest, which is
+                // 0.26 * bulk deep. A fixed offset tuned on a heavy character leaves
+                // the frame floating in front of a slim one.
+                float chestFront = ChestFront(spec);
+
                 for (int i = 0; i < 3; i++)
                 {
-                    frame.AddCylinder(new Vector3(-0.09f + i * 0.09f, -0.02f, -0.11f) * scale,
+                    frame.AddCylinder(new Vector3(-0.09f + i * 0.09f, -0.02f, chestFront * 0.92f) * scale,
                         0.018f * scale, 0.3f * scale, 6);
                 }
-                frame.AddCylinder(new Vector3(0f, 0.10f, -0.11f) * scale, 0.03f * scale, 0.2f * scale, 8,
-                    Quaternion.Euler(0f, 0f, 90f));
+                frame.AddCylinder(new Vector3(0f, 0.10f, chestFront * 0.92f) * scale,
+                    0.03f * scale, 0.2f * scale, 8, Quaternion.Euler(0f, 0f, 90f));
             }
 
             // Neck servo.
             var neck = batch(rig.Neck).For(SurfaceKind.AnimatronicMetal);
             neck.CurrentColor = new Color(0.45f, 0.46f, 0.48f);
-            neck.AddCylinder(new Vector3(0f, -0.02f, 0f) * scale, 0.055f * scale, 0.14f * scale, 8);
+            neck.AddCylinder(new Vector3(0f, -0.06f, 0f) * scale, 0.062f * scale, 0.20f * scale, 10);
+
+            // A shell collar over the servo. Without it the head reads as floating.
+            var collar = batch(rig.Neck).For(SurfaceKind.AnimatronicShell);
+            collar.CurrentColor = Weathered(spec.shellPrimary, spec, 4);
+            collar.AddCylinder(new Vector3(0f, -0.07f, 0f) * scale, 0.105f * bulk * scale,
+                0.09f * scale, 12, topRadiusScale: 0.82f);
         }
 
         private static void BuildArms(AnimatronicRig rig, AnimatronicModelSpec spec, float scale,
@@ -297,7 +325,7 @@ namespace Grotto.Procedural
         private static void BuildHead(AnimatronicRig rig, AnimatronicModelSpec spec, float scale,
             System.Func<Transform, SurfaceBatch> batch)
         {
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
 
             var skull = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
             skull.CurrentColor = Weathered(spec.shellPrimary, spec, 40);
@@ -310,26 +338,26 @@ namespace Grotto.Procedural
             muzzle.AddSphere(new Vector3(0f, head * 0.35f, head * 0.78f), head * 0.52f, 12, 8,
                 new Vector3(1.15f, 0.72f, 1.25f));
 
-            // Jaw, hinged so the servo animator can chatter it.
+            // Lower jaw, tucked under the muzzle so the two read as a closed mouth.
             var jaw = batch(rig.Jaw).For(SurfaceKind.AnimatronicShell);
             jaw.CurrentColor = Weathered(spec.shellSecondary, spec, 42);
-            jaw.AddRoundedBox(new Vector3(0f, -head * 0.16f, head * 0.62f),
-                new Vector3(head * 1.02f, head * 0.34f, head * 1.15f), Quaternion.identity, 0.28f);
+            jaw.AddRoundedBox(new Vector3(0f, -head * 0.08f, head * 0.44f),
+                new Vector3(head * 0.98f, head * 0.30f, head * 1.05f), Quaternion.identity, 0.28f);
 
             // Teeth: square, evenly spaced, very slightly too many.
             var teeth = batch(rig.Jaw).For(SurfaceKind.AnimatronicMetal);
             teeth.CurrentColor = new Color(0.86f, 0.84f, 0.78f);
             for (int i = 0; i < 6; i++)
             {
-                float x = (i - 2.5f) * head * 0.26f;
-                teeth.AddBox(new Vector3(x, head * 0.02f, head * 1.08f),
-                    new Vector3(head * 0.18f, head * 0.16f, head * 0.1f));
+                float x = (i - 2.5f) * head * 0.24f;
+                teeth.AddBox(new Vector3(x, head * 0.04f, head * 0.92f),
+                    new Vector3(head * 0.17f, head * 0.15f, head * 0.1f));
             }
         }
 
         private static void AttachEyes(AnimatronicRig rig, AnimatronicModelSpec spec, float scale)
         {
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
             var eyeMaterial = MaterialLibrary.Instance(SurfaceKind.EmissiveWarm, spec.eyeGlow);
             eyeMaterial.SetColor("_EmissionColor", spec.eyeGlow * 3.2f);
 
@@ -343,12 +371,14 @@ namespace Grotto.Procedural
 
                 // Socket, then the lamp inside it. The recess is what makes the glow
                 // read as coming from inside the head rather than painted on.
-                builder.AddSphere(Vector3.zero, head * 0.17f, 10, 8);
+                builder.AddSphere(Vector3.zero, head * 0.155f, 12, 10);
 
                 var go = new GameObject(side == 0 ? "Eye.L" : "Eye.R");
                 go.transform.SetParent(rig.Head, worldPositionStays: false);
+                // Far enough forward to break the skull's surface. At head * 0.66 they
+                // were entirely inside it, and the character had no eyes at all.
                 go.transform.localPosition = new Vector3(
-                    (side == 0 ? -1f : 1f) * head * 0.36f, head * 0.62f, head * 0.66f);
+                    (side == 0 ? -1f : 1f) * head * 0.33f, head * 0.66f, head * 0.92f);
                 go.layer = layer;
 
                 go.AddComponent<MeshFilter>().sharedMesh = builder.ToMesh("EyeLamp");
@@ -380,7 +410,7 @@ namespace Grotto.Procedural
         private static void DressBear(AnimatronicRig rig, AnimatronicModelSpec spec, float scale,
             System.Func<Transform, SurfaceBatch> batch)
         {
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
 
             // Round ears.
             var ears = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
@@ -401,21 +431,22 @@ namespace Grotto.Procedural
             // Waistcoat and bow tie — he is the host, after all.
             var vest = batch(rig.Chest).For(SurfaceKind.AnimatronicFabric);
             vest.CurrentColor = spec.fabric;
-            vest.AddRoundedBox(new Vector3(0f, 0.08f, -0.12f) * scale,
-                new Vector3(0.34f * spec.bulk, 0.30f, 0.06f) * scale, Quaternion.identity, 0.15f);
+            // Sits just proud of the chest shell, not floating off it.
+            vest.AddRoundedBox(new Vector3(0f, 0.06f, ChestFront(spec) * 0.9f) * scale,
+                new Vector3(0.30f * spec.bulk, 0.28f, 0.05f) * scale, Quaternion.identity, 0.15f);
 
             var tie = batch(rig.Chest).For(SurfaceKind.AnimatronicFabric);
             tie.CurrentColor = new Color(0.55f, 0.09f, 0.12f);
-            tie.AddBox(new Vector3(-0.05f, 0.24f, -0.14f) * scale, new Vector3(0.08f, 0.06f, 0.03f) * scale,
+            tie.AddBox(new Vector3(-0.05f, 0.24f, ChestFront(spec) * 1.1f) * scale, new Vector3(0.08f, 0.06f, 0.03f) * scale,
                 Quaternion.Euler(0f, 0f, 18f));
-            tie.AddBox(new Vector3(0.05f, 0.24f, -0.14f) * scale, new Vector3(0.08f, 0.06f, 0.03f) * scale,
+            tie.AddBox(new Vector3(0.05f, 0.24f, ChestFront(spec) * 1.1f) * scale, new Vector3(0.08f, 0.06f, 0.03f) * scale,
                 Quaternion.Euler(0f, 0f, -18f));
         }
 
         private static void DressBat(AnimatronicRig rig, AnimatronicModelSpec spec, float scale,
             System.Func<Transform, SurfaceBatch> batch)
         {
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
 
             // Ears, comically oversized, which is both correct for a bat and correct
             // for a mascot.
@@ -436,9 +467,9 @@ namespace Grotto.Procedural
                 membrane.CurrentColor = new Color(spec.fabric.r, spec.fabric.g, spec.fabric.b) * 0.8f;
 
                 float dir = side == 0 ? 1f : -1f;
-                membrane.AddBox(new Vector3(dir * 0.08f, -0.14f, -0.02f) * scale,
-                    new Vector3(0.02f, 0.42f, 0.30f) * scale,
-                    Quaternion.Euler(0f, 0f, dir * 14f));
+                membrane.AddBox(new Vector3(dir * 0.13f, -0.12f, -0.01f) * scale,
+                    new Vector3(0.025f, 0.52f, 0.46f) * scale,
+                    Quaternion.Euler(0f, 0f, dir * 22f));
 
                 // Wing finger struts.
                 var struts = batch(arm).For(SurfaceKind.AnimatronicMetal);
@@ -455,12 +486,12 @@ namespace Grotto.Procedural
         private static void DressMole(AnimatronicRig rig, AnimatronicModelSpec spec, float scale,
             System.Func<Transform, SurfaceBatch> batch)
         {
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
 
             // Snout, long and pink.
             var snout = batch(rig.Head).For(SurfaceKind.AnimatronicShell);
             snout.CurrentColor = new Color(0.62f, 0.4f, 0.4f);
-            snout.AddCone(new Vector3(0f, head * 0.42f, head * 0.8f), head * 0.3f, head * 0.65f, 10,
+            snout.AddCone(new Vector3(0f, head * 0.38f, head * 1.05f), head * 0.34f, head * 0.8f, 12,
                 Quaternion.Euler(90f, 0f, 0f));
 
             // Welding goggles over the eyes: he was the one who "dug the tunnels".
@@ -483,7 +514,7 @@ namespace Grotto.Procedural
         private static void DressSalamander(AnimatronicRig rig, AnimatronicModelSpec spec, float scale,
             System.Func<Transform, SurfaceBatch> batch)
         {
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
 
             // External gill frills.
             var frills = batch(rig.Head).For(SurfaceKind.AnimatronicFabric);
@@ -528,19 +559,19 @@ namespace Grotto.Procedural
             // seen the others from across a dark room.
             DressBat(rig, spec, scale, batch);
 
-            float head = 0.17f * spec.headScale * scale;
+            float head = HeadRadius(spec, scale);
 
             // A second jaw, bolted where a jaw does not go.
             var extra = batch(rig.Chest).For(SurfaceKind.AnimatronicShell);
             extra.CurrentColor = Weathered(spec.shellSecondary, spec, 80);
-            extra.AddRoundedBox(new Vector3(0f, 0.06f, -0.13f) * scale,
+            extra.AddRoundedBox(new Vector3(0f, 0.06f, ChestFront(spec) * 1.15f) * scale,
                 new Vector3(head * 0.9f, head * 0.3f, head * 0.5f), Quaternion.Euler(12f, 0f, 0f), 0.25f);
 
             var extraTeeth = batch(rig.Chest).For(SurfaceKind.AnimatronicMetal);
             extraTeeth.CurrentColor = new Color(0.8f, 0.78f, 0.72f);
             for (int i = 0; i < 5; i++)
             {
-                extraTeeth.AddBox(new Vector3((i - 2f) * head * 0.2f, 0.06f * scale, -0.16f * scale),
+                extraTeeth.AddBox(new Vector3((i - 2f) * head * 0.2f, 0.06f * scale, ChestFront(spec) * 1.45f * scale),
                     new Vector3(head * 0.14f, head * 0.2f, head * 0.08f));
             }
 
@@ -583,13 +614,16 @@ namespace Grotto.Procedural
             float grime = spec.wear * Mathf.Lerp(0.55f, 1f, variation);
 
             Color.RGBToHSV(baseColor, out float h, out float s, out float v);
-            s *= 1f - grime * 0.45f;
-            v *= 1f - grime * 0.40f;
+
+            // Restrained: at the previous 0.45/0.40 a heavily worn character lost its
+            // identity entirely and every one of them read as the same grey plastic.
+            s *= 1f - grime * 0.28f;
+            v *= 1f - grime * 0.24f;
 
             var aged = Color.HSVToRGB(h, s, v);
 
             // Limestone dust settles warm.
-            return Color.Lerp(aged, new Color(0.42f, 0.40f, 0.35f), grime * 0.25f);
+            return Color.Lerp(aged, new Color(0.42f, 0.40f, 0.35f), grime * 0.16f);
         }
     }
 }

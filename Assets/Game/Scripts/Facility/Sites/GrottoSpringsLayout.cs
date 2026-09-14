@@ -40,13 +40,43 @@ namespace Grotto.Facility
         /// <summary>Above this the crossing can no longer be walked.</summary>
         public const float CrossingDrowned = 0.75f;
 
-        public const string DoorNorth = "DOOR_N";
-        public const string DoorSouth = "DOOR_S";
-        public const string SumpGrate = "GRATE";
+        // Aliases. The ids themselves belong to the station, not to this site.
+        public const string DoorNorth = FacilityBarriers.DoorNorth;
+        public const string DoorSouth = FacilityBarriers.DoorSouth;
+        public const string SumpGrate = FacilityBarriers.SumpGrate;
 
         public static void Populate(FacilityLayout layout)
         {
+            layout.siteId = "grotto";
             layout.siteName = "Grotto Springs Family Fun Caverns";
+            layout.siteTagline = "A show cave, ninety feet down. The water cuts both ways.";
+            layout.siteEmphasis = "Balanced";
+            layout.unlockAfterNights = 0;
+            layout.palette = SitePalette.Limestone;
+
+            layout.wiring = new SiteWiring
+            {
+                northApproach = "ADIT_N",
+                southApproach = "ADIT_S",
+                sump = "SUMP",
+                chase = "CHASE",
+                generatorBay = "GEN",
+                deepGallery = "DEEP"
+            };
+
+            layout.gates = new WaterGates
+            {
+                diggable = SumpDiggable,
+                wadeable = SumpWadeable,
+                swimmable = ChannelSwimmable,
+                drowned = CrossingDrowned
+            };
+
+            layout.startingWaterLevel = 0.45f;
+            layout.waterScale = 1f;
+            layout.airScale = 1f;
+            layout.fuelScale = 1f;
+
             layout.siteBlurb =
                 "Opened July 1979 in the Marrow Hollow limestone system: a show cavern, " +
                 "a mineral spring terrace and an arcade, ninety feet under a hillside. " +
@@ -262,48 +292,54 @@ namespace Grotto.Facility
             // The long way round the back of the show cavern, dry-only.
             Link(layout, "DEEP", "STAGE", TraversalMask.Walk, seconds: 10f, noise: 0.3f,
                 maxWater: CrossingDrowned);
+
+            // =================================================================
+            // CAST
+            // =================================================================
+            //
+            // Where the five live *here*. The character definitions describe how each
+            // one moves; this says which rooms it moves between, so the same cast can
+            // be dropped into another building without editing five assets.
+
+            layout.cast.Clear();
+
+            // Barty walks the show route and knocks on both doors. The obvious threat,
+            // and the one the player learns the camera rhythm from.
+            Place(layout, "barty", home: "STAGE", retreat: "GRAND", "ADIT_N", "ADIT_S");
+
+            // Vesper drops out of the bell chimney into the karst and comes down the chase.
+            Place(layout, "vesper", home: "CHIMNEY", retreat: "MIDWAY", "CHASE");
+
+            // Marlow lives in the workshop and digs up through the basin when it is dry.
+            Place(layout, "marlow", home: "WORKSHOP", retreat: "GEN", "SUMP");
+
+            // Echo only exists when the water is high enough to swim the channel.
+            Place(layout, "echo", home: "DEEP", retreat: "RIVER", "SUMP");
+
+            // Chorus has no body of its own. It borrows every approach at once.
+            Place(layout, "chorus", home: "DEEP", retreat: "DEEP", "ADIT_N", "ADIT_S", "SUMP");
         }
 
         // ---------------------------------------------------------------------
         // Authoring helpers
         // ---------------------------------------------------------------------
 
+        // Forwarders, so this file reads as authoring rather than as plumbing.
+
         private static void Node(FacilityLayout layout, string id, string name, NodeKind kind,
             FacilityZone zone, Vector3 pos, Vector3 size, bool hasCamera = true,
             bool ambientLight = false, float coupling = 0.2f, string caption = "")
-        {
-            layout.nodes.Add(new FacilityLayout.NodeDef
-            {
-                id = id,
-                displayName = name,
-                kind = kind,
-                zone = zone,
-                position = pos,
-                size = size,
-                hasCamera = hasCamera,
-                hasAmbientLight = ambientLight,
-                stationCoupling = coupling,
-                cameraCaption = caption
-            });
-        }
+            => LayoutAuthoring.Node(layout, id, name, kind, zone, pos, size,
+                hasCamera, ambientLight, coupling, caption);
 
         private static void Link(FacilityLayout layout, string a, string b, TraversalMask allowed,
             float seconds, float noise, float minWater = 0f, float maxWater = 1f,
             string barrier = "", bool lightDeters = false, bool oneWay = false)
-        {
-            layout.links.Add(new FacilityLayout.LinkDef
-            {
-                a = a,
-                b = b,
-                allowed = allowed,
-                traverseSeconds = seconds,
-                noiseTransmission = noise,
-                minWater = minWater,
-                maxWater = maxWater,
-                barrierId = barrier,
-                lightDeters = lightDeters,
-                oneWay = oneWay
-            });
-        }
+            => LayoutAuthoring.Link(layout, a, b, allowed, seconds, noise,
+                minWater, maxWater, barrier, lightDeters, oneWay);
+
+        private static void Place(FacilityLayout layout, string animatronicId,
+            string home, string retreat, params string[] attackNodes)
+            => LayoutAuthoring.Place(layout, animatronicId, home, retreat, attackNodes);
     }
 }

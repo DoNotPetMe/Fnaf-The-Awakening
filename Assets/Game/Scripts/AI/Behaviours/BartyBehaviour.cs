@@ -18,9 +18,6 @@ namespace Grotto.AI.Behaviours
     /// </summary>
     public sealed class BartyBehaviour : AnimatronicBehaviour
     {
-        private static readonly NodeId AditNorth = new NodeId("ADIT_N");
-        private static readonly NodeId AditSouth = new NodeId("ADIT_S");
-
         private NodeId _committedApproach;
         private float _commitmentRemaining;
 
@@ -36,8 +33,8 @@ namespace Grotto.AI.Behaviours
 
             // A door cycling is unmistakable, and he is already halfway there.
             float doorNoise = Mathf.Max(
-                Facility.Noise.GetLevel(AditNorth),
-                Facility.Noise.GetLevel(AditSouth));
+                Facility.Noise.GetLevel(Facility.NorthApproach),
+                Facility.Noise.GetLevel(Facility.SouthApproach));
             pressure += doorNoise * 0.45f;
 
             return pressure;
@@ -77,10 +74,10 @@ namespace Grotto.AI.Behaviours
         private void ChooseApproach(bool flip = false)
         {
             bool north = flip
-                ? _committedApproach == AditSouth
+                ? _committedApproach == Facility.SouthApproach
                 : Rng.Chance(0.5f);
 
-            _committedApproach = north ? AditNorth : AditSouth;
+            _committedApproach = north ? Facility.NorthApproach : Facility.SouthApproach;
             _commitmentRemaining = Rng.Range(25f, 55f);
 
             GLog.Verbose(LogChannel.AI, $"Barty is working toward {_committedApproach}.");

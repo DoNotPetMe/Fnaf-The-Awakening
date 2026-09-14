@@ -255,9 +255,10 @@ namespace Grotto.DevTools
         private static string AiAttack(CommandArgs args)
         {
             var controller = Character(args.String(0));
-            var attackNodes = controller.Definition.attackNodes;
+            var attackNodes = controller.AttackNodes;
 
-            if (attackNodes.Count == 0) return $"{controller.Id} has no attack nodes.";
+            if (attackNodes == null || attackNodes.Count == 0)
+                return $"{controller.Id} has no attack nodes at this site.";
 
             controller.DebugTeleport(new NodeId(attackNodes[0]));
             controller.DebugForceState(AnimatronicState.Attack);
@@ -498,8 +499,8 @@ namespace Grotto.DevTools
         private static string Door(CommandArgs args)
         {
             string side = args.String(0).ToLowerInvariant();
-            string barrierId = side.StartsWith("n") ? GrottoSpringsLayout.DoorNorth
-                : side.StartsWith("s") ? GrottoSpringsLayout.DoorSouth
+            string barrierId = side.StartsWith("n") ? FacilityBarriers.DoorNorth
+                : side.StartsWith("s") ? FacilityBarriers.DoorSouth
                 : throw new System.ArgumentException("side must be n or s");
 
             if (!(Facility.GetBarrier(barrierId) is BlastDoor door))
@@ -522,7 +523,7 @@ namespace Grotto.DevTools
             Help = "Locks or unlocks the sump grate.", Usage = "grate [on|off]")]
         private static string Grate(CommandArgs args)
         {
-            if (!(Facility.GetBarrier(GrottoSpringsLayout.SumpGrate) is SumpGrate grate))
+            if (!(Facility.GetBarrier(FacilityBarriers.SumpGrate) is SumpGrate grate))
                 return "No sump grate in this scene.";
 
             grate.SetLocked(args.Bool(0, grate.IsLocked));

@@ -104,6 +104,7 @@ namespace Grotto.Audio
             }
 
             PlaceLoops();
+            CollectDripSources();
             HookCast();
         }
 
@@ -200,6 +201,18 @@ namespace Grotto.Audio
             _fan.transform.position = _facility.Graph.PositionOf(_facility.StationNode);
         }
 
+        /// <summary>Anything wet, plus the station itself for the close ones.</summary>
+        private void CollectDripSources()
+        {
+            _dripNodes.Clear();
+
+            foreach (var node in _facility.Graph.Nodes)
+                if (node.Kind == NodeKind.Watercourse || node.Kind == NodeKind.Sump)
+                    _dripNodes.Add(node.Id);
+
+            _dripNodes.Add(_facility.StationNode);
+        }
+
         private void HookCast()
         {
             if (_ai == null) return;
@@ -269,11 +282,9 @@ namespace Grotto.Audio
             source.volume = MathUtil.ExpDecay(source.volume, target, lambda, dt);
         }
 
-        private static readonly NodeId[] DripNodes =
-        {
-            new NodeId("SUMP"), new NodeId("RIVER"), new NodeId("DINE"), new NodeId("STATION")
-        };
-
+        // Built from the layout, so drips come from wherever this site's water is
+        // rather than from a hard-coded list of one map's rooms.
+        private readonly List<NodeId> _dripNodes = new List<NodeId>(6);
         private float _dripTimer;
 
         private void TickIdleDrips(float dt)
@@ -283,10 +294,9 @@ namespace Grotto.Audio
 
             _dripTimer = Random.Range(1.4f, 5.5f);
 
-            // Drips come from wherever the water actually is.
-            var node = DripNodes[Random.Range(0, DripNodes.Length)];
-            if (!_facility.Graph.Contains(node)) node = _facility.StationNode;
+            if (_dripNodes.Count == 0) return;
 
+            var node = _dripNodes[Random.Range(0, _dripNodes.Count)];
             PlayAt("Drip", _facility.Graph.PositionOf(node),
                 Random.Range(0.25f, 0.5f), Random.Range(0.85f, 1.25f));
         }

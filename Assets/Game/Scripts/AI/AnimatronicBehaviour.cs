@@ -163,12 +163,18 @@ namespace Grotto.AI
             return best;
         }
 
-        /// <summary>True when this node is one the character can strike the station from.</summary>
+        /// <summary>
+        /// True when this node is one the character can strike the station from at the
+        /// *current site* — which may differ from the definition's own list.
+        /// </summary>
         public bool IsAttackNode(NodeId node)
         {
-            var nodes = Definition.attackNodes;
+            var nodes = Owner.AttackNodes;
+            if (nodes == null) return false;
+
             for (int i = 0; i < nodes.Count; i++)
                 if (new NodeId(nodes[i]) == node) return true;
+
             return false;
         }
 

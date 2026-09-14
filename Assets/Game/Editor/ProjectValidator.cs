@@ -172,9 +172,9 @@ namespace Grotto.Editor
             // permanently open and nobody notices until playtest.
             var barrierIds = new HashSet<string>
             {
-                GrottoSpringsLayout.DoorNorth,
-                GrottoSpringsLayout.DoorSouth,
-                GrottoSpringsLayout.SumpGrate
+                FacilityBarriers.DoorNorth,
+                FacilityBarriers.DoorSouth,
+                FacilityBarriers.SumpGrate
             };
 
             foreach (var link in layout.links)

@@ -21,6 +21,8 @@ namespace Grotto.Facility
     public sealed class WaterSystem : IPowerConsumer
     {
         private readonly FacilityTuning _tuning;
+        private WaterGates _gates = WaterGates.Default;
+        private float _startingLevel;
         private bool _pumpCommanded;
         private bool _powered = true;
         private bool _floodReported;
@@ -54,8 +56,14 @@ namespace Grotto.Facility
         /// <summary>Net rate. Negative means the pump is winning.</summary>
         public float NetRatePerHour { get; private set; }
 
-        public bool SumpIsDry => Level01 <= GrottoSpringsLayout.SumpDiggable;
-        public bool ChannelIsSwimmable => Level01 >= GrottoSpringsLayout.ChannelSwimmable;
+        /// <summary>Where this site's routes open and close. Set per site.</summary>
+        public WaterGates Gates => _gates;
+
+        public bool SumpIsDry => Level01 <= _gates.diggable;
+        public bool ChannelIsSwimmable => Level01 >= _gates.swimmable;
+
+        /// <summary>True in the band where neither the dig nor the swim route exists.</summary>
+        public bool InSafeBand => Level01 > _gates.wadeable && Level01 < _gates.swimmable;
 
         public event Action<bool> PumpStateChanged;
 
@@ -65,12 +73,23 @@ namespace Grotto.Facility
         public WaterSystem(FacilityTuning tuning)
         {
             _tuning = tuning != null ? tuning : ScriptableObject.CreateInstance<FacilityTuning>();
-            Level01 = _tuning.startingWaterLevel;
+            _startingLevel = _tuning.startingWaterLevel;
+            Level01 = _startingLevel;
+        }
+
+        /// <summary>Applies a site's water character. Call before the first night.</summary>
+        public void ConfigureSite(WaterGates gates, float startingLevel)
+        {
+            _gates = gates.Sanitised();
+            _startingLevel = Mathf.Clamp01(startingLevel);
+
+            GLog.Info(LogChannel.Facility,
+                $"Water configured: start {_startingLevel:0.00}, gates {_gates}.");
         }
 
         public void ResetForNight()
         {
-            Level01 = Mathf.Clamp01(_tuning.startingWaterLevel);
+            Level01 = Mathf.Clamp01(_startingLevel);
             PumpCondition01 = 1f;
             _floodReported = false;
             PumpCommanded = false;

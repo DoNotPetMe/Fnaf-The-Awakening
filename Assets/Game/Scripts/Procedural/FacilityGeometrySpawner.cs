@@ -43,6 +43,10 @@ namespace Grotto.Procedural
         {
             ClearGenerated();
 
+            // The runtime is the authority on which site is being played; ask it first
+            // so the geometry can never disagree with the graph the AI is walking.
+            var runtime = FacilityRuntime.Instance;
+            if (runtime != null && runtime.Layout != null) layout = runtime.Layout;
             if (layout == null) layout = FacilityLayout.LoadDefault();
             if (layout == null)
             {

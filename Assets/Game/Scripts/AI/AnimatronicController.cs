@@ -76,6 +76,15 @@ namespace Grotto.AI
 
         public int AiLevel { get; private set; }
         public NodeId CurrentNode { get; private set; }
+
+        /// <summary>Where this character starts at the current site.</summary>
+        public NodeId HomeNode { get; private set; }
+
+        /// <summary>Where it falls back to at the current site.</summary>
+        public NodeId RetreatNode { get; private set; }
+
+        /// <summary>Nodes it can strike the station from at the current site.</summary>
+        public IReadOnlyList<string> AttackNodes { get; private set; }
         public AnimatronicState State => _machine != null ? _machine.Current : AnimatronicState.Dormant;
         public float TimeInState => _machine != null ? _machine.TimeInState : 0f;
 
@@ -105,6 +114,17 @@ namespace Grotto.AI
         // Setup
         // ---------------------------------------------------------------------
 
+        /// <summary>
+        /// Assigns this controller's character from code. The cast is built at runtime
+        /// now — which characters exist and where they start depends on the site the
+        /// player picked — so the scene cannot carry the reference.
+        /// </summary>
+        public void Configure(AnimatronicDefinition characterDefinition, float ground = 0f)
+        {
+            definition = characterDefinition;
+            groundOffset = ground;
+        }
+
         public void Initialise(AIDirector director, FacilityRuntime facility, RandomSource rng, int aiLevel)
         {
             _director = director;
@@ -122,11 +142,14 @@ namespace Grotto.AI
             _behaviour = AnimatronicBehaviour.Create(definition.behaviour);
             _behaviour.Initialise(this, facility, rng);
 
-            CurrentNode = new NodeId(definition.homeNode);
+            ResolvePlacement(facility);
+
+            CurrentNode = HomeNode;
             if (!facility.Graph.Contains(CurrentNode))
             {
                 GLog.Error(LogChannel.AI,
-                    $"{Id}: home node '{definition.homeNode}' is not in the layout. Falling back to the station's neighbour.");
+                    $"{Id}: home node '{CurrentNode}' is not in this site's layout. " +
+                    "Check the layout's cast placement. Falling back to the station.");
                 CurrentNode = facility.Graph.StationNode;
             }
 
@@ -140,6 +163,31 @@ namespace Grotto.AI
 
             _machine.Begin(AiLevel > 0 ? AnimatronicState.Roam : AnimatronicState.Dormant);
             PublishState();
+        }
+
+        /// <summary>
+        /// Takes this site's placement if it has one, and the definition's own values
+        /// otherwise — so a character works on a map that has never heard of it.
+        /// </summary>
+        private void ResolvePlacement(FacilityRuntime facility)
+        {
+            var placement = facility.Layout != null ? facility.Layout.FindPlacement(definition.id) : null;
+
+            string home = placement != null && !string.IsNullOrWhiteSpace(placement.homeNode)
+                ? placement.homeNode : definition.homeNode;
+
+            string retreat = placement != null && !string.IsNullOrWhiteSpace(placement.retreatNode)
+                ? placement.retreatNode : definition.EffectiveRetreatNode;
+
+            HomeNode = new NodeId(home);
+            RetreatNode = new NodeId(string.IsNullOrWhiteSpace(retreat) ? home : retreat);
+
+            AttackNodes = placement != null && placement.attackNodes.Count > 0
+                ? placement.attackNodes
+                : definition.attackNodes;
+
+            GLog.Verbose(LogChannel.AI,
+                $"{Id} placed: home {HomeNode}, retreat {RetreatNode}, {AttackNodes.Count} attack node(s).");
         }
 
         private void BuildStateMachine()
@@ -336,7 +384,7 @@ namespace Grotto.AI
         {
             _retreatTimer += dt;
 
-            var home = new NodeId(definition.EffectiveRetreatNode);
+            var home = RetreatNode;
             if (CurrentNode != home)
             {
                 _rollTimer += dt;

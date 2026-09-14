@@ -28,6 +28,9 @@ jobs:
       - name: Validate project structure
         run: python3 Tools/validate_project.py
 
+      - name: Check the site layouts
+        run: python3 Tools/check_layouts.py
+
       - name: Check the manifest parses
         run: |
           python3 -c "import json; json.load(open('Packages/manifest.json')); print('packages manifest ok')"
@@ -39,7 +42,8 @@ jobs:
           # A stray committed texture or model should be caught here, not in review.
           found=$(git ls-files -- '*.png' '*.jpg' '*.jpeg' '*.tga' '*.psd' '*.exr' '*.hdr' \
                                   '*.fbx' '*.blend' '*.glb' '*.wav' '*.ogg' '*.mp3' '*.unitypackage' \
-                    | grep -v '^Assets/Game/Art/Downloaded/' || true)
+                    | grep -v '^Assets/Game/Art/Downloaded/' \
+                    | grep -v '^docs/renders/' || true)
           if [ -n "$found" ]; then
             echo "Binary asset files are committed to the repository:"
             echo "$found"

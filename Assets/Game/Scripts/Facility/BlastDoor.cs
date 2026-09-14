@@ -21,7 +21,7 @@ namespace Grotto.Facility
 
         [Header("Identity")]
         [Tooltip("Must match the barrierId on the corresponding link in the layout.")]
-        [SerializeField] private string barrierId = GrottoSpringsLayout.DoorNorth;
+        [SerializeField] private string barrierId = FacilityBarriers.DoorNorth;
 
         [Tooltip("Node the door's noise is made in — the corridor side, not the station.")]
         [SerializeField] private string noiseNodeId = "ADIT_N";
@@ -87,6 +87,22 @@ namespace Grotto.Facility
         }
 
         // ---- Unity ----------------------------------------------------------
+
+        /// <summary>
+        /// Wires this door from code. Used by the runtime fixture spawner, which builds
+        /// the control room for whichever site is being played — the scene cannot bake
+        /// a door whose position depends on a map chosen at the menu.
+        /// </summary>
+        public void Configure(string barrier, string noiseNode, string label,
+            Transform panelTransform, Vector3 closedOffset, bool startClosed)
+        {
+            barrierId = barrier;
+            noiseNodeId = noiseNode;
+            displayName = label;
+            panel = panelTransform;
+            closedLocalOffset = closedOffset;
+            this.startClosed = startClosed;
+        }
 
         private void Awake()
         {

@@ -17,10 +17,12 @@ namespace Grotto.AI.Behaviours
     /// </summary>
     public sealed class EchoBehaviour : AnimatronicBehaviour
     {
-        private static readonly NodeId Deep = new NodeId("DEEP");
-        private static readonly NodeId River = new NodeId("RIVER");
-
         private int _grateAttempts;
+
+        private NodeId Deep => Facility.DeepNode;
+
+        /// <summary>The deep water she falls back to when the channel drops.</summary>
+        private NodeId Shelter => Owner.RetreatNode;
 
         public override float MovementPressure()
         {
@@ -28,7 +30,7 @@ namespace Grotto.AI.Behaviours
 
             // Deeper water, freer movement.
             float depth = MathUtil.Remap01(
-                Facility.Water.Level01, GrottoSpringsLayout.ChannelSwimmable, 1f);
+                Facility.Water.Level01, Facility.Gates.swimmable, 1f);
             pressure *= Mathf.Lerp(0.7f, 1.75f, depth);
 
             return pressure;
@@ -40,7 +42,7 @@ namespace Grotto.AI.Behaviours
             if (toStation.IsValid) return toStation;
 
             // Channel too shallow. Hold in the deep water and wait for the pump to stop.
-            var retreat = StepToward(current, Facility.Water.Level01 > 0.4f ? River : Deep);
+            var retreat = StepToward(current, Facility.Water.Level01 > 0.4f ? Shelter : Deep);
             return retreat.IsValid ? retreat : NodeId.None;
         }
 
@@ -71,16 +73,16 @@ namespace Grotto.AI.Behaviours
         public override bool IsStranded()
         {
             // Not literally unreachable — she simply has nothing to do until it rains.
-            return Facility.Water.Level01 < GrottoSpringsLayout.ChannelSwimmable * 0.85f
+            return Facility.Water.Level01 < Facility.Gates.swimmable * 0.85f
                    && !HasRouteToStation(Owner.CurrentNode);
         }
 
         public override string DebugSummary()
         {
             float water = Facility.Water.Level01;
-            return water >= GrottoSpringsLayout.ChannelSwimmable
+            return water >= Facility.Gates.swimmable
                 ? $"channel open ({water:0.00})"
-                : $"beached ({water:0.00} < {GrottoSpringsLayout.ChannelSwimmable:0.00})";
+                : $"beached ({water:0.00} < {Facility.Gates.swimmable:0.00})";
         }
     }
 }

@@ -271,8 +271,10 @@ namespace Grotto.UI
                 captionRect.anchoredPosition = new Vector2(0f, 1f);
             }
 
-            Tick(GrottoSpringsLayout.SumpDiggable, new Color(0.85f, 0.55f, 0.2f), "DIG");
-            Tick(GrottoSpringsLayout.ChannelSwimmable, new Color(0.35f, 0.7f, 0.85f), "SWIM");
+            // Read from the live site, so a different map's gauge shows its own marks.
+            var gates = _facility.Gates;
+            Tick(gates.diggable, new Color(0.85f, 0.55f, 0.2f), "DIG");
+            Tick(gates.swimmable, new Color(0.35f, 0.7f, 0.85f), "SWIM");
         }
 
         private void BuildSystemsLine()
@@ -433,9 +435,9 @@ namespace Grotto.UI
 
         private void UpdateSystemsLine()
         {
-            var doorNorth = _facility.GetBarrier(GrottoSpringsLayout.DoorNorth) as BlastDoor;
-            var doorSouth = _facility.GetBarrier(GrottoSpringsLayout.DoorSouth) as BlastDoor;
-            var grate = _facility.GetBarrier(GrottoSpringsLayout.SumpGrate) as SumpGrate;
+            var doorNorth = _facility.GetBarrier(FacilityBarriers.DoorNorth) as BlastDoor;
+            var doorSouth = _facility.GetBarrier(FacilityBarriers.DoorSouth) as BlastDoor;
+            var grate = _facility.GetBarrier(FacilityBarriers.SumpGrate) as SumpGrate;
 
             string DoorState(BlastDoor door) => door == null ? "<color=#666666>--</color>"
                 : door.State == BlastDoor.DoorState.Buckled ? "<color=#EB4238>FAILED</color>"

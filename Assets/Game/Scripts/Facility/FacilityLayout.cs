@@ -57,20 +57,86 @@ namespace Grotto.Facility
         }
 
         [Header("Identity")]
+        [Tooltip("Stable id. Used by the save file and the site picker.")]
+        public string siteId = "grotto";
+
         public string siteName = "Grotto Springs Family Fun Caverns";
+
+        [Tooltip("One line for the site picker.")]
+        public string siteTagline = "A show cave. The water cuts both ways.";
+
+        [Tooltip("Which axis this site leans on, for the picker.")]
+        public string siteEmphasis = "Balanced";
+
+        [Tooltip("Nights survived at any site before this one unlocks. 0 is always available.")]
+        [Min(0)] public int unlockAfterNights;
 
         [TextArea(3, 8)]
         public string siteBlurb =
             "Opened 1979 in the Marrow Hollow limestone system. Closed 1993 after the " +
             "spring flooded the lower gallery. Reclamation survey ongoing.";
 
+        /// <summary>
+        /// Where one character lives at this site.
+        ///
+        /// An AnimatronicDefinition describes the *character* — how it moves, what
+        /// stops it, what it looks like. Where it starts, retreats to and strikes from
+        /// is a property of the building, so it belongs here. Without this split a
+        /// second site is impossible: every definition would be pinned to the first
+        /// map's room names.
+        /// </summary>
+        [Serializable]
+        public sealed class CastPlacement
+        {
+            public string animatronicId = "";
+            public string homeNode = "";
+            public string retreatNode = "";
+            public List<string> attackNodes = new List<string>();
+        }
+
         [Header("Topology")]
         public List<NodeDef> nodes = new List<NodeDef>();
         public List<LinkDef> links = new List<LinkDef>();
 
+        [Header("Cast placement")]
+        [Tooltip("Where each character lives at this site. Falls back to the definition when absent.")]
+        public List<CastPlacement> cast = new List<CastPlacement>();
+
         [Header("Camera captions")]
         [Tooltip("Node id whose camera the monitor opens on.")]
         public string defaultCameraNode = "GRAND";
+
+        [Header("Site wiring")]
+        [Tooltip("Which node plays which structural role. Replaces hard-coded ids.")]
+        public SiteWiring wiring = new SiteWiring
+        {
+            northApproach = "ADIT_N",
+            southApproach = "ADIT_S",
+            sump = "SUMP",
+            chase = "CHASE",
+            generatorBay = "GEN",
+            deepGallery = "DEEP"
+        };
+
+        [Tooltip("Where this site's routes open and close on the water axis.")]
+        public WaterGates gates = WaterGates.Default;
+
+        [Header("Site character")]
+        [Tooltip("Water level at midnight.")]
+        [Range(0f, 1f)] public float startingWaterLevel = 0.45f;
+
+        [Tooltip("Multiplies the night's own water inflow scale.")]
+        [Range(0.2f, 3f)] public float waterScale = 1f;
+
+        [Tooltip("Multiplies the night's own air decay scale.")]
+        [Range(0.2f, 3f)] public float airScale = 1f;
+
+        [Tooltip("Multiplies the night's own fuel burn scale.")]
+        [Range(0.2f, 3f)] public float fuelScale = 1f;
+
+        [Header("Look")]
+        [Tooltip("Surface palette. Natural rock, or built concrete and steel.")]
+        public SitePalette palette = SitePalette.Limestone;
 
         /// <summary>Builds a runtime graph. The layout asset itself stays immutable.</summary>
         public FacilityGraph BuildGraph()
@@ -116,6 +182,18 @@ namespace Grotto.Facility
             return graph;
         }
 
+        /// <summary>This site's placement for a character, or null if it uses the default.</summary>
+        public CastPlacement FindPlacement(string animatronicId)
+        {
+            if (string.IsNullOrWhiteSpace(animatronicId)) return null;
+
+            for (int i = 0; i < cast.Count; i++)
+                if (string.Equals(cast[i].animatronicId, animatronicId, StringComparison.OrdinalIgnoreCase))
+                    return cast[i];
+
+            return null;
+        }
+
         public NodeDef FindNode(string id)
         {
             for (int i = 0; i < nodes.Count; i++)
@@ -127,30 +205,22 @@ namespace Grotto.Facility
         [ContextMenu("Populate with Grotto Springs")]
         public void PopulateWithDefault() => GrottoSpringsLayout.Populate(this);
 
-        private static FacilityLayout _cached;
-
         /// <summary>
-        /// Loads the layout asset from Resources, falling back to a code-built copy so
-        /// that the graph, the AI and the tests all work in a project where nobody has
-        /// created the asset yet.
+        /// The site the profile has selected, or the grotto when there is no profile.
+        ///
+        /// Every caller that just wants "the map" uses this; <see cref="SiteCatalog"/>
+        /// is the one that knows which map that is, and whether the player has
+        /// actually unlocked it.
         /// </summary>
         public static FacilityLayout LoadDefault()
         {
-            if (_cached != null) return _cached;
+            SaveData save = null;
+            if (ServiceLocator.TryGet(out SaveSystem saves)) save = saves.Data;
 
-            _cached = Resources.Load<FacilityLayout>("FacilityLayout_GrottoSprings");
-            if (_cached == null)
-            {
-                GLog.Info(LogChannel.Facility, "No layout asset found; building Grotto Springs from code.");
-                _cached = CreateInstance<FacilityLayout>();
-                GrottoSpringsLayout.Populate(_cached);
-            }
-            return _cached;
+            return SiteCatalog.Load(SiteCatalog.SelectedSiteId(save));
         }
 
-#if UNITY_EDITOR
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetCache() => _cached = null;
-#endif
+        /// <summary>Loads one named site, ignoring what the profile has selected.</summary>
+        public static FacilityLayout LoadSite(string siteId) => SiteCatalog.Load(siteId);
     }
 }

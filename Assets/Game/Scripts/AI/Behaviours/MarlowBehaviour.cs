@@ -19,9 +19,8 @@ namespace Grotto.AI.Behaviours
     /// </summary>
     public sealed class MarlowBehaviour : AnimatronicBehaviour
     {
-        private static readonly NodeId Sump = new NodeId("SUMP");
-        private static readonly NodeId Generator = new NodeId("GEN");
-        private static readonly NodeId Workshop = new NodeId("WORKSHOP");
+        private NodeId Sump => Facility.SumpNode;
+        private NodeId Generator => Facility.GeneratorNode;
 
         public override float MovementPressure()
         {
@@ -29,7 +28,7 @@ namespace Grotto.AI.Behaviours
 
             // The drier the silt, the faster he works.
             float water = Facility.Water.Level01;
-            float dryness = Mathf.Clamp01(1f - water / Mathf.Max(0.01f, GrottoSpringsLayout.SumpDiggable));
+            float dryness = Mathf.Clamp01(1f - water / Mathf.Max(0.01f, Facility.Gates.diggable));
             pressure *= Mathf.Lerp(0.6f, 1.6f, dryness);
 
             return pressure;
@@ -38,7 +37,7 @@ namespace Grotto.AI.Behaviours
         public override NodeId ChooseNextNode(NodeId current)
         {
             // Flushed out: the basin came up around him while he was working.
-            if (current == Sump && Facility.Water.Level01 > GrottoSpringsLayout.SumpWadeable * 0.95f)
+            if (current == Sump && Facility.Water.Level01 > Facility.Gates.wadeable * 0.95f)
             {
                 var out_ = StepToward(current, Generator);
                 if (out_.IsValid) return out_;
@@ -48,7 +47,7 @@ namespace Grotto.AI.Behaviours
             if (toStation.IsValid) return toStation;
 
             // No road tonight — potter about the service side making noise.
-            var loiter = Rng.Chance(0.5f) ? Generator : Workshop;
+            var loiter = Rng.Chance(0.5f) ? Generator : Owner.HomeNode;
             var step = StepToward(current, loiter);
             return step.IsValid ? step : RandomNeighbour(current);
         }
@@ -60,7 +59,7 @@ namespace Grotto.AI.Behaviours
         public override bool CanBreach(bool defaultOpen, FacilityLink link, IFacilityBarrier barrier)
         {
             if (!defaultOpen) return false;
-            return Facility.Water.Level01 <= GrottoSpringsLayout.SumpDiggable;
+            return Facility.Water.Level01 <= Facility.Gates.diggable;
         }
 
         public override bool IsStranded() => !HasRouteToStation(Owner.CurrentNode);
@@ -68,8 +67,8 @@ namespace Grotto.AI.Behaviours
         public override string DebugSummary()
         {
             float water = Facility.Water.Level01;
-            string gate = water <= GrottoSpringsLayout.SumpDiggable ? "can dig"
-                : water <= GrottoSpringsLayout.SumpWadeable ? "basin only"
+            string gate = water <= Facility.Gates.diggable ? "can dig"
+                : water <= Facility.Gates.wadeable ? "basin only"
                 : "shut out";
             return $"water {water:0.00} — {gate}";
         }

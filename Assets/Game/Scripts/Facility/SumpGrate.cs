@@ -15,7 +15,7 @@ namespace Grotto.Facility
     [DisallowMultipleComponent]
     public sealed class SumpGrate : MonoBehaviour, IPowerConsumer, IFacilityBarrier
     {
-        [SerializeField] private string barrierId = GrottoSpringsLayout.SumpGrate;
+        [SerializeField] private string barrierId = FacilityBarriers.SumpGrate;
         [SerializeField] private string noiseNodeId = "SUMP";
         [SerializeField] private string displayName = "Sump grate bolts";
 
@@ -67,6 +67,18 @@ namespace Grotto.Facility
         {
             // The grate does not buckle. It is bolted into bedrock; it just rattles.
             if (amount > 0f) _noise?.Emit(_noiseNode, Mathf.Clamp01(amount * 0.01f), NoiseKind.Impact);
+        }
+
+        /// <summary>Wires this grate from code. See <see cref="BlastDoor.Configure"/>.</summary>
+        public void Configure(string barrier, string noiseNode, string label,
+            Transform bolts, Vector3 lockedOffset, float swimmerResistance)
+        {
+            barrierId = barrier;
+            noiseNodeId = noiseNode;
+            displayName = label;
+            boltsTransform = bolts;
+            lockedLocalOffset = lockedOffset;
+            this.swimmerResistance = swimmerResistance;
         }
 
         private void Awake()

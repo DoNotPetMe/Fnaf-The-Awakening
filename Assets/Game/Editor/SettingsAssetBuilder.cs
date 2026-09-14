@@ -26,7 +26,13 @@ namespace Grotto.Editor
         public const string ResourcesPath = "Assets/Game/Resources";
         public const string SettingsPath = "Assets/Game/Settings";
         public const string NightsPath = SettingsPath + "/Nights";
-        public const string CastPath = SettingsPath + "/Cast";
+
+        /// <summary>
+        /// The cast lives under Resources because it is loaded at runtime now: the
+        /// scene no longer carries character references, since which characters stand
+        /// where depends on the site the player picked at the menu.
+        /// </summary>
+        public const string CastPath = ResourcesPath + "/" + CastSpawner.ResourceFolder;
 
         [MenuItem("Tools/Grotto/Rebuild Settings Assets", priority = 20)]
         public static void RebuildWithPrompt()
@@ -48,9 +54,17 @@ namespace Grotto.Editor
 
             var tuning = GetOrCreate<FacilityTuning>($"{ResourcesPath}/FacilityTuning.asset");
 
-            var layout = GetOrCreate<FacilityLayout>($"{ResourcesPath}/FacilityLayout_GrottoSprings.asset");
-            GrottoSpringsLayout.Populate(layout);
-            EditorUtility.SetDirty(layout);
+            // Every shipping site, baked from its code layout. The catalog is the
+            // source of truth for which sites exist and what each asset is called.
+            int nodeTotal = 0;
+            for (int i = 0; i < SiteCatalog.Count; i++)
+            {
+                var entry = SiteCatalog.EntryAt(i);
+                var site = GetOrCreate<FacilityLayout>($"{ResourcesPath}/{entry.ResourceName}.asset");
+                entry.Populate(site);
+                EditorUtility.SetDirty(site);
+                nodeTotal += site.nodes.Count;
+            }
 
             var cast = BuildCast();
             var nights = BuildNights();
@@ -67,7 +81,7 @@ namespace Grotto.Editor
 
             GLog.Info(LogChannel.Core,
                 $"Settings rebuilt: {nights.Length} nights, {cast.Length} characters, " +
-                $"{layout.nodes.Count} nodes.");
+                $"{SiteCatalog.Count} sites, {nodeTotal} nodes.");
         }
 
         private static void EnsureFolders()

@@ -21,12 +21,12 @@ namespace Grotto.AI.Behaviours
     /// </summary>
     public sealed class VesperBehaviour : AnimatronicBehaviour
     {
-        private static readonly NodeId Chase = new NodeId("CHASE");
-        private static readonly NodeId CrawlB = new NodeId("CRAWL_B");
-        private static readonly NodeId CrawlA = new NodeId("CRAWL_A");
-        private static readonly NodeId Midway = new NodeId("MIDWAY");
-
         private const int RebuffsBeforeReset = 3;
+
+        private NodeId Chase => Facility.ChaseNode;
+
+        /// <summary>Where she drops to and begins the climb again.</summary>
+        private NodeId ResetTarget => Owner.RetreatNode;
 
         private int _rebuffs;
         private bool _resetting;
@@ -48,16 +48,16 @@ namespace Grotto.AI.Behaviours
             if (_resetting)
             {
                 // Falling back out of the ceiling to begin the climb again.
-                var down = StepToward(current, Midway);
+                var down = StepToward(current, ResetTarget);
                 if (down.IsValid) return down;
 
                 _resetting = false;
                 _rebuffs = 0;
             }
 
-            // If the chase is lit, hold in the crawlway rather than crowding the mouth.
+            // If the chase is lit, hold one step short rather than crowding the mouth.
             var chaseNode = Graph.Node(Chase);
-            if (chaseNode != null && chaseNode.IsLit && current == CrawlB)
+            if (chaseNode != null && chaseNode.IsLit && Graph.FindLink(current, Chase) != null)
                 return NodeId.None;
 
             var toChase = StepToward(current, Chase);
@@ -76,16 +76,16 @@ namespace Grotto.AI.Behaviours
             // Enough. She lets go and drops into the Midway.
             _resetting = true;
             _rebuffs = 0;
-            Facility.Noise.Emit(CrawlA, 0.55f, NoiseKind.Impact);
+            Facility.Noise.Emit(Owner.CurrentNode, 0.55f, NoiseKind.Impact);
             EventBus.Publish(new ScareSignal(0.3f, "vesper-drop"));
         }
 
         public override void OnArrived(NodeId node)
         {
-            if (node == Midway) _resetting = false;
+            if (node == ResetTarget) _resetting = false;
         }
 
         public override string DebugSummary()
-            => _resetting ? "dropping to Midway" : $"rebuffs {_rebuffs}/{RebuffsBeforeReset}";
+            => _resetting ? $"dropping to {ResetTarget}" : $"rebuffs {_rebuffs}/{RebuffsBeforeReset}";
     }
 }

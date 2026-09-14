@@ -21,7 +21,14 @@ namespace Grotto.Facility
         public static FacilityRuntime Instance { get; private set; }
 
         [Header("Data")]
+        [Tooltip("Pinned site. Ignored unless 'use selected site' is off.")]
         [SerializeField] private FacilityLayout layout;
+
+        [Tooltip("Load whichever site the player chose in the menu. Turn this off to pin " +
+                 "the scene to the layout above, which is what the tests and the map " +
+                 "preview want.")]
+        [SerializeField] private bool useSelectedSite = true;
+
         [SerializeField] private FacilityTuning tuning;
 
         [Header("Fallback pacing")]
@@ -52,6 +59,32 @@ namespace Grotto.Facility
 
         public NodeId StationNode => Graph.StationNode;
 
+        // ---- Structural roles -------------------------------------------------
+        //
+        // Everything that used to hard-code "ADIT_N" or "SUMP" reads these, which is
+        // what lets a second site exist without touching the AI or the audio.
+
+        /// <summary>Node behind the north blast door.</summary>
+        public NodeId NorthApproach { get; private set; }
+
+        /// <summary>Node behind the south blast door.</summary>
+        public NodeId SouthApproach { get; private set; }
+
+        /// <summary>Node below the station, behind the grate.</summary>
+        public NodeId SumpNode { get; private set; }
+
+        /// <summary>Node above the station. No door; light is the only answer.</summary>
+        public NodeId ChaseNode { get; private set; }
+
+        /// <summary>Where the generator lives.</summary>
+        public NodeId GeneratorNode { get; private set; }
+
+        /// <summary>The deep, camera-less node the geophones exist to cover.</summary>
+        public NodeId DeepNode { get; private set; }
+
+        /// <summary>This site's water thresholds.</summary>
+        public WaterGates Gates => Water.Gates;
+
         // ---------------------------------------------------------------------
         // Lifecycle
         // ---------------------------------------------------------------------
@@ -66,10 +99,17 @@ namespace Grotto.Facility
             }
             Instance = this;
 
-            if (layout == null) layout = FacilityLayout.LoadDefault();
+            if (useSelectedSite || layout == null) layout = FacilityLayout.LoadDefault();
             if (tuning == null) tuning = FacilityTuning.LoadDefault();
 
             Graph = layout.BuildGraph();
+
+            NorthApproach = new NodeId(layout.wiring.northApproach);
+            SouthApproach = new NodeId(layout.wiring.southApproach);
+            SumpNode = new NodeId(layout.wiring.sump);
+            ChaseNode = new NodeId(layout.wiring.chase);
+            GeneratorNode = new NodeId(layout.wiring.generatorBay);
+            DeepNode = new NodeId(layout.wiring.deepGallery);
 
             var problems = Graph.Validate();
             for (int i = 0; i < problems.Count; i++)
@@ -81,18 +121,22 @@ namespace Grotto.Facility
             Noise = new NoiseField(Graph, tuning);
             Surveillance = new SurveillanceSystem(Graph, tuning);
 
+            Water.ConfigureSite(layout.gates, layout.startingWaterLevel);
+
             Power.Register(Ventilation);
             Power.Register(Water);
             Power.Register(Surveillance);
 
-            Power.NoiseBurst += amount => Noise.Emit(NodeGenerator, amount, NoiseKind.Machinery);
+            Power.NoiseBurst += amount => Noise.Emit(GeneratorNode, amount, NoiseKind.Machinery);
             Surveillance.NoiseBurst += amount => Noise.Emit(Graph.StationNode, amount, NoiseKind.Machinery);
 
             Ventilation.Suffocated += () => _night?.RequestOutcome(NightOutcome.Suffocated);
             Water.Flooded += () => _night?.RequestOutcome(NightOutcome.Flooded);
 
             ServiceLocator.Register(this);
-            GLog.Info(LogChannel.Facility, $"Facility runtime ready: {layout.siteName}.");
+            GLog.Info(LogChannel.Facility,
+                $"Facility runtime ready: {layout.siteName} " +
+                $"({Graph.NodeCount} nodes, water {layout.startingWaterLevel:0.00}, gates {layout.gates}).");
         }
 
         private void Start()
@@ -126,9 +170,11 @@ namespace Grotto.Facility
 
         private void ResetForNight(NightDefinition definition)
         {
-            _airDecayScale = definition != null ? definition.airDecayScale : 1f;
-            _waterInflowScale = definition != null ? definition.waterInflowScale : 1f;
-            _fuelBurnScale = definition != null ? definition.fuelBurnScale : 1f;
+            // Night difficulty multiplied by the site's own character, so the same
+            // night plays differently at a hydro station than in a dry grain terminal.
+            _airDecayScale = (definition != null ? definition.airDecayScale : 1f) * layout.airScale;
+            _waterInflowScale = (definition != null ? definition.waterInflowScale : 1f) * layout.waterScale;
+            _fuelBurnScale = (definition != null ? definition.fuelBurnScale : 1f) * layout.fuelScale;
 
             float fuel = definition != null ? definition.startingFuelLitres : tuning.fuelCapacityLitres * 0.75f;
             int cans = definition != null ? definition.spareFuelCans : 2;
@@ -185,14 +231,11 @@ namespace Grotto.Facility
             return delta / Mathf.Max(1f, clock.SecondsPerHour);
         }
 
-        private static readonly NodeId NodeGenerator = new NodeId("GEN");
-        private static readonly NodeId NodeSump = new NodeId("SUMP");
-
         private void PublishContinuousNoise()
         {
-            Noise.SetContinuous("generator", NodeGenerator, Power.Generator.ContinuousNoise);
+            Noise.SetContinuous("generator", GeneratorNode, Power.Generator.ContinuousNoise);
             Noise.SetContinuous("fan", Graph.StationNode, Ventilation.Noise);
-            Noise.SetContinuous("pump", NodeSump, Water.Noise);
+            Noise.SetContinuous("pump", SumpNode, Water.Noise);
         }
 
         // ---------------------------------------------------------------------

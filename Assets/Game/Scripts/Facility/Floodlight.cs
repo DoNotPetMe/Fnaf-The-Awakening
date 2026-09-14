@@ -46,6 +46,17 @@ namespace Grotto.Facility
 
         public event Action<bool> Toggled;
 
+        /// <summary>Wires this fitting from code. See <see cref="BlastDoor.Configure"/>.</summary>
+        public void Configure(string node, string label, Light[] fixtures,
+            bool flicker, float flickerAmount)
+        {
+            nodeId = node;
+            displayName = label;
+            lights = fixtures ?? new Light[0];
+            this.flicker = flicker;
+            this.flickerAmount = flickerAmount;
+        }
+
         private void Awake()
         {
             _id = new NodeId(nodeId);

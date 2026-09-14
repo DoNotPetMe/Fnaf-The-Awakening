@@ -109,20 +109,27 @@ namespace Grotto.Core
             GLog.Info(LogChannel.Save, "Profile reset.");
         }
 
-        public void RecordNightAttempt(int night)
+        /// <summary>Which site to file a result under. Null means "the one selected".</summary>
+        public void RecordNightAttempt(int night, string siteId = null)
         {
-            var record = Data.GetOrCreateRecord(night);
+            var record = Data.GetOrCreateRecord(night, siteId);
             record.attempts++;
         }
 
-        public void RecordNightResult(int night, NightOutcome outcome, float survivedSeconds)
+        public void RecordNightResult(int night, NightOutcome outcome, float survivedSeconds,
+            string siteId = null)
         {
-            var record = Data.GetOrCreateRecord(night);
+            var record = Data.GetOrCreateRecord(night, siteId);
             record.bestSurvivalSeconds = Mathf.Max(record.bestSurvivalSeconds, survivedSeconds);
 
             if (outcome == NightOutcome.Survived)
             {
                 record.completed = true;
+
+                // Night progression is shared across sites rather than tracked per
+                // site. Clearing night three anywhere opens night four everywhere:
+                // the sites are alternative *places* to play a night, not three
+                // separate campaigns to grind through in parallel.
                 Data.highestNightUnlocked = Mathf.Max(Data.highestNightUnlocked, night + 1);
                 if (night >= 5) Data.nightSixUnlocked = true;
                 if (night >= 6) Data.customNightUnlocked = true;
@@ -142,8 +149,21 @@ namespace Grotto.Core
 
             GLog.Info(LogChannel.Save, $"Migrating profile from version {data.version} to {SaveData.CurrentVersion}.");
 
-            // Migration steps go here as the format evolves, e.g.
-            //   if (data.version < 2) { ...fill new fields... }
+            if (data.version < 2)
+            {
+                // Version 1 predates multi-site play, so every record on file was set
+                // at the grotto whether or not it says so. JsonUtility fills a missing
+                // string with null rather than the field initialiser, which is why
+                // these are stamped explicitly instead of being left to default.
+                if (string.IsNullOrWhiteSpace(data.selectedSiteId)) data.selectedSiteId = "grotto";
+
+                for (int i = 0; i < data.nightRecords.Count; i++)
+                {
+                    var record = data.nightRecords[i];
+                    if (record != null && string.IsNullOrWhiteSpace(record.siteId))
+                        record.siteId = "grotto";
+                }
+            }
 
             data.version = SaveData.CurrentVersion;
         }
