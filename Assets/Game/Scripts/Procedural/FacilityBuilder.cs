@@ -54,7 +54,7 @@ namespace Grotto.Procedural
 
                 int nodeSeed = seed ^ (node.Id.Key.GetHashCode() & 0x7FFFFFFF);
                 CaveShaper.BuildNodeShell(batch, local, nodeSeed);
-                Dress(batch, node, nodeSeed);
+                Dress(batch, node, nodeSeed, layout.wiring);
 
                 totalTriangles += batch.Flush(go.transform, node.Id.Key, addColliders: true,
                     layer: facilityLayer, recalculateNormals: true);
@@ -157,12 +157,61 @@ namespace Grotto.Procedural
         // Per-room dressing, in node-local space
         // =====================================================================
 
-        private static void Dress(SurfaceBatch batch, FacilityNode node, int seed)
+        /// <summary>
+        /// Furnishes one room.
+        ///
+        /// Dispatched in three passes, in decreasing specificity:
+        ///
+        ///  1. the room's <b>structural role</b> — every site has a station, a sump and
+        ///     a generator bay, and they all want the same furniture wherever they are;
+        ///  2. the room's <b>named id</b>, for the set pieces a particular site has —
+        ///     the grotto's arcade row, its theatre seating, its spring pools;
+        ///  3. the room's <b>kind</b>, so a room no rule names is not simply empty.
+        ///
+        /// The third pass is the one that matters most for a new site. Before it, a
+        /// map that did not happen to use the grotto's node ids produced a set of bare
+        /// boxes — geometrically correct and completely unfurnished.
+        /// </summary>
+        private static void Dress(SurfaceBatch batch, FacilityNode node, int seed, SiteWiring wiring)
         {
             float floorY = -node.Size.y * 0.35f;
             var floor = new Vector3(0f, floorY, 0f);
 
-            switch (node.Id.Key)
+            string id = node.Id.Key;
+
+            // ---- 1. By role -------------------------------------------------
+            if (id == wiring.generatorBay)
+            {
+                PropFactory.Genset(batch, floor + new Vector3(-1.4f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
+                PropFactory.Clutter(batch, floor + new Vector3(2.6f, 0f, 2f), 2f, 5, seed);
+                return;
+            }
+
+            if (id == wiring.sump)
+            {
+                PropFactory.SumpPump(batch, floor + new Vector3(1.4f, 0f, 0f), Quaternion.identity);
+                CaveShaper.BuildBreakdown(batch, floor + new Vector3(-1.5f, 0f, -1f), 3f, 6, seed);
+                return;
+            }
+
+            if (id == wiring.northApproach || id == wiring.southApproach)
+            {
+                PropFactory.PipeRun(batch,
+                    floor + new Vector3(-1.3f, node.Size.y * 0.8f, -node.Size.z * 0.45f),
+                    floor + new Vector3(-1.3f, node.Size.y * 0.8f, node.Size.z * 0.45f),
+                    4, 0.06f, 0.16f, Vector3.right);
+                return;
+            }
+
+            if (id == wiring.deepGallery)
+            {
+                CaveShaper.BuildBreakdown(batch, floor, Mathf.Min(node.Size.x, node.Size.z) * 0.7f, 18, seed);
+                PropFactory.Clutter(batch, floor + new Vector3(4f, 0f, -3f), 4f, 5, seed + 11);
+                return;
+            }
+
+            // ---- 2. By name, for a site's own set pieces --------------------
+            switch (id)
             {
                 case "STATION":
                     PropFactory.ControlDesk(batch, floor + new Vector3(0f, 0f, 1.6f), Quaternion.identity);
@@ -173,25 +222,11 @@ namespace Grotto.Procedural
                     PropFactory.Clutter(batch, floor + new Vector3(2.4f, 0f, -2.6f), 1.6f, 3, seed);
                     break;
 
-                case "ADIT_N":
-                case "ADIT_S":
-                    PropFactory.PipeRun(batch,
-                        floor + new Vector3(-1.3f, node.Size.y * 0.8f, -node.Size.z * 0.45f),
-                        floor + new Vector3(-1.3f, node.Size.y * 0.8f, node.Size.z * 0.45f),
-                        4, 0.06f, 0.16f, Vector3.right);
-                    break;
-
-                case "SUMP":
-                    PropFactory.SumpPump(batch, floor + new Vector3(1.4f, 0f, 0f), Quaternion.identity);
-                    CaveShaper.BuildBreakdown(batch, floor + new Vector3(-1.5f, 0f, -1f), 3f, 6, seed);
-                    break;
-
-                case "GEN":
-                    PropFactory.Genset(batch, floor + new Vector3(-1.4f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
-                    PropFactory.Clutter(batch, floor + new Vector3(2.6f, 0f, 2f), 2f, 5, seed);
-                    break;
-
+                // Workshops, fitting shops and plant rooms are the same room with
+                // different signage, so they share the same benches.
                 case "WORKSHOP":
+                case "FITTING":
+                case "PLANT":
                     PropFactory.Workbench(batch, floor + new Vector3(0f, 0f, 3f), Quaternion.identity, occupied: false);
                     PropFactory.Workbench(batch, floor + new Vector3(-3f, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), occupied: true);
                     PropFactory.Workbench(batch, floor + new Vector3(3f, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), occupied: false);
@@ -199,11 +234,14 @@ namespace Grotto.Procedural
                     break;
 
                 case "LOCKER":
+                case "MESS":
                     PropFactory.LockerBank(batch, floor + new Vector3(0f, 0f, 2.4f), Quaternion.identity, 6);
                     PropFactory.LockerBank(batch, floor + new Vector3(0f, 0f, -2.4f), Quaternion.Euler(0f, 180f, 0f), 6);
                     break;
 
                 case "LOBBY":
+                case "GALLERY":
+                case "TUNNEL":
                     PropFactory.Turnstiles(batch, floor + new Vector3(0f, 0f, -2f), Quaternion.identity, 4);
                     PropFactory.Clutter(batch, floor + new Vector3(-5f, 0f, 3f), 3f, 4, seed);
                     break;
@@ -228,6 +266,7 @@ namespace Grotto.Procedural
                     break;
 
                 case "GRAND":
+                case "ANNEX":
                     PropFactory.TheatreSeating(batch, floor + new Vector3(2f, 0f, -2f),
                         Quaternion.Euler(0f, 90f, 0f), rows: 6, seatsPerRow: 10, seed: seed);
                     CaveShaper.BuildBreakdown(batch, floor + new Vector3(-8f, 0f, 6f), 4f, 5, seed);
@@ -236,6 +275,31 @@ namespace Grotto.Procedural
                 case "STAGE":
                     PropFactory.StagePlatform(batch, floor, new Vector3(9f, 0.8f, 6f),
                         Quaternion.Euler(0f, 90f, 0f));
+                    break;
+
+                // Hollowmere's machine hall: two sets under dust sheets, read here as
+                // stage platforms with pipe runs over them.
+                case "TURBINE":
+                    PropFactory.StagePlatform(batch, floor + new Vector3(-5f, 0f, 0f),
+                        new Vector3(7f, 1.1f, 6f), Quaternion.identity);
+                    PropFactory.StagePlatform(batch, floor + new Vector3(6f, 0f, 0f),
+                        new Vector3(7f, 1.1f, 6f), Quaternion.identity);
+                    PropFactory.PipeRun(batch,
+                        floor + new Vector3(-node.Size.x * 0.4f, node.Size.y * 0.75f, -3f),
+                        floor + new Vector3(node.Size.x * 0.4f, node.Size.y * 0.75f, -3f),
+                        5, 0.11f, 0.3f, Vector3.up);
+                    PropFactory.Clutter(batch, floor + new Vector3(0f, 0f, 5f), 4f, 6, seed);
+                    break;
+
+                // Sablefield's headhouse: the leg, the distributor, and a lot of dust.
+                case "HEADHOUSE":
+                    PropFactory.Workbench(batch, floor + new Vector3(-3f, 0f, 0f),
+                        Quaternion.Euler(0f, 90f, 0f), occupied: true);
+                    PropFactory.PipeRun(batch,
+                        floor + new Vector3(2f, 0f, -3f),
+                        floor + new Vector3(2f, node.Size.y * 0.8f, -3f),
+                        3, 0.16f, 0.4f, Vector3.right);
+                    PropFactory.Clutter(batch, floor + new Vector3(0f, 0f, 3f), 4f, 7, seed);
                     break;
 
                 case "XING":
@@ -257,6 +321,60 @@ namespace Grotto.Procedural
                     PropFactory.Catwalk(batch,
                         floor + new Vector3(0f, 0f, -node.Size.z * 0.4f),
                         floor + new Vector3(0f, 2.5f, node.Size.z * 0.4f), 1.8f);
+                    break;
+
+                default:
+                    DressByKind(batch, node, seed, floor);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// The fallback: furnish a room from what kind of space it is.
+        ///
+        /// Nothing here is site-specific, which is the point — a new map gets rooms
+        /// that look inhabited on the day it is written, and any set piece it deserves
+        /// can be added by name later.
+        /// </summary>
+        private static void DressByKind(SurfaceBatch batch, FacilityNode node, int seed, Vector3 floor)
+        {
+            switch (node.Kind)
+            {
+                case NodeKind.Cavern:
+                    CaveShaper.BuildBreakdown(batch, floor + new Vector3(node.Size.x * 0.22f, 0f, -node.Size.z * 0.2f),
+                        Mathf.Min(node.Size.x, node.Size.z) * 0.35f, 6, seed);
+                    PropFactory.Clutter(batch, floor + new Vector3(-node.Size.x * 0.25f, 0f, node.Size.z * 0.22f),
+                        3f, 5, seed + 3);
+                    break;
+
+                case NodeKind.Room:
+                    PropFactory.ShelfUnit(batch, floor + new Vector3(-node.Size.x * 0.34f, 0f, 0f),
+                        Quaternion.Euler(0f, 90f, 0f), seed);
+                    PropFactory.Clutter(batch, floor + new Vector3(node.Size.x * 0.25f, 0f, -node.Size.z * 0.2f),
+                        2f, 4, seed + 7);
+                    break;
+
+                case NodeKind.Adit:
+                    // A service run down one wall, at head height.
+                    PropFactory.PipeRun(batch,
+                        floor + new Vector3(-node.Size.x * 0.36f, node.Size.y * 0.78f, -node.Size.z * 0.45f),
+                        floor + new Vector3(-node.Size.x * 0.36f, node.Size.y * 0.78f, node.Size.z * 0.45f),
+                        4, 0.06f, 0.16f, Vector3.right);
+                    break;
+
+                case NodeKind.Shaft:
+                    // A ladder run: a catwalk stood on end is exactly the right shape.
+                    PropFactory.Catwalk(batch,
+                        floor + new Vector3(node.Size.x * 0.3f, 0f, 0f),
+                        floor + new Vector3(node.Size.x * 0.3f, node.Size.y * 0.9f, 0f), 0.9f);
+                    break;
+
+                case NodeKind.Watercourse:
+                    CaveShaper.BuildBreakdown(batch, floor, Mathf.Min(node.Size.x, node.Size.z) * 0.6f, 9, seed);
+                    break;
+
+                case NodeKind.Sump:
+                    CaveShaper.BuildBreakdown(batch, floor, Mathf.Min(node.Size.x, node.Size.z) * 0.5f, 5, seed);
                     break;
             }
         }

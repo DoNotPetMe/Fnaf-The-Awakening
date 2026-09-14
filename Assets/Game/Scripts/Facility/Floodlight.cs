@@ -46,6 +46,9 @@ namespace Grotto.Facility
 
         public event Action<bool> Toggled;
 
+        /// <summary>The node this fitting lights. Read by the station to wire its switches.</summary>
+        public string NodeId => nodeId;
+
         /// <summary>Wires this fitting from code. See <see cref="BlastDoor.Configure"/>.</summary>
         public void Configure(string node, string label, Light[] fixtures,
             bool flicker, float flickerAmount)

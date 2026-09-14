@@ -234,8 +234,10 @@ namespace Grotto.Audio
 
         private void PlaceLoops()
         {
-            _generator.transform.position = _facility.Graph.PositionOf(new NodeId("GEN"));
-            _pump.transform.position = _facility.Graph.PositionOf(new NodeId("SUMP"));
+            // By role, not by name: "GEN" and "SUMP" only exist at the grotto, and at
+            // any other site both loops were playing from the world origin.
+            _generator.transform.position = _facility.Graph.PositionOf(_facility.GeneratorNode);
+            _pump.transform.position = _facility.Graph.PositionOf(_facility.SumpNode);
             _cavitation.transform.position = _pump.transform.position;
             _fan.transform.position = _facility.Graph.PositionOf(_facility.StationNode);
         }

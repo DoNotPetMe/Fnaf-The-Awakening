@@ -177,8 +177,9 @@ namespace Grotto.AI
 
                 case HallucinationKind.FalseContact:
                 {
-                    // Favour the blind spots — a contact you cannot go and check is worse.
-                    var blind = new NodeId("DEEP");
+                    // Favour the blind spot — a contact you cannot go and check is worse.
+                    // Whichever node the site wired as its deep gallery, not the grotto's.
+                    var blind = _facility.DeepNode;
                     if (_rng.Chance(0.5f) && _facility.Graph.Contains(blind)) return blind;
                     break;
                 }

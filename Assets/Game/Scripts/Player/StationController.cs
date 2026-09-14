@@ -160,17 +160,37 @@ namespace Grotto.Player
                 $"Seated at {headPivot.position.y:0.00}m ({eyeHeight:0.00}m above a floor at {floorY:0.00}m).");
         }
 
+        /// <summary>
+        /// Finds the three switchable floodlights by the node each one covers.
+        ///
+        /// Matched against the facility's <em>wired</em> approach ids rather than
+        /// against the grotto's literal room names, which is what the first version
+        /// did — at any other site it matched nothing and the player's three light
+        /// switches did nothing at all.
+        /// </summary>
         private void ResolveFloodlights()
         {
             if (northLight != null && southLight != null && chaseLight != null) return;
 
-            var all = FindObjectsByType<Floodlight>(FindObjectsSortMode.None);
-            foreach (var light in all)
+            string north = _facility.NorthApproach.Key;
+            string south = _facility.SouthApproach.Key;
+            string chase = _facility.ChaseNode.Key;
+
+            foreach (var light in FindObjectsByType<Floodlight>(FindObjectsSortMode.None))
             {
-                string label = light.name.ToUpperInvariant();
-                if (northLight == null && label.Contains("ADIT_N")) northLight = light;
-                else if (southLight == null && label.Contains("ADIT_S")) southLight = light;
-                else if (chaseLight == null && label.Contains("CHASE")) chaseLight = light;
+                string covers = light.NodeId;
+
+                if (northLight == null && covers == north) northLight = light;
+                else if (southLight == null && covers == south) southLight = light;
+                else if (chaseLight == null && covers == chase) chaseLight = light;
+            }
+
+            if (northLight == null || southLight == null || chaseLight == null)
+            {
+                GLog.Warn(LogChannel.Player,
+                    $"Floodlights not fully wired: north {(northLight != null ? "ok" : "missing")}, " +
+                    $"south {(southLight != null ? "ok" : "missing")}, " +
+                    $"chase {(chaseLight != null ? "ok" : "missing")}.");
             }
         }
 

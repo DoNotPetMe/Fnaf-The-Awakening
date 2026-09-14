@@ -57,6 +57,13 @@ namespace Grotto.Procedural
                 return;
             }
 
+            // The palette has to be set before *any* material is asked for, and this is
+            // the earliest Procedural component to run (-820). FacilityBuilder sets it
+            // too, at -800, but by then these fixtures would already hold materials
+            // built against the previous site's palette — and clearing the cache would
+            // leave them holding orphans rather than updating them.
+            MaterialLibrary.Palette = layout.palette;
+
             var graph = runtime != null ? runtime.Graph : layout.BuildGraph();
 
             // Built inactive and switched on at the end. A component added to a live
